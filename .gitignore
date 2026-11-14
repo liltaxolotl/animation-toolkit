@@ -1,0 +1,38 @@
+# This repo is public. Artwork, frames, audio, trackers and anything rendered from them stay local.
+samples/
+out/
+tests/out/
+_scratch/
+
+# belt and braces: no media or spreadsheets anywhere, whatever folder they land in
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.psd
+*.procreate
+*.tif
+*.tiff
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.m4a
+*.aac
+*.ogg
+*.flac
+*.xlsx
+*.xls
+*.csv
+*.zip
+
+# the original helper this toolkit grew out of (its code now lives in animtk/scene3d.py)
+perspective_toolkit.py
+
+__pycache__/
+*.pyc
+node_modules/
+package-lock.json
+package.json
+.vscode/

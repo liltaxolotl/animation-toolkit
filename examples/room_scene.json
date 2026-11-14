@@ -1,0 +1,14 @@
+{
+  "canvas": [3840, 1920],
+  "camera": {"pos": [0.5, 4.5, 0], "yaw": 8, "pitch": -6, "roll": 4, "fov": 95, "k": 0.6, "skew": 0},
+  "room": {"L": -5, "R": 6, "D": 14, "ceil": 8.5, "tile": 1},
+  "props": [
+    {"type": "shelf", "name": "bookshelf", "pos": [-3.2, 0, 13.3], "size": [3, 6.5, 1.2], "shelves": 3},
+    {"type": "bottle", "name": "bottle", "pos": [-3.9, 1.71, 13.2], "r": 0.2, "h": 1.1},
+    {"type": "jar", "name": "jar", "pos": [-2.8, 3.29, 13.2], "r": 0.3, "h": 0.8},
+    {"type": "cabinet", "name": "cabinet", "pos": [5.2, 0, 8], "size": [3, 3, 1.5], "rot": 90, "shelves": 1, "doors": 2, "swing": 55},
+    {"type": "door", "name": "door", "pos": [2.5, 0, 13.9], "size": [3, 6.8], "swing": 50, "hinge": "left"},
+    {"type": "box", "name": "crate", "pos": [-1.5, 0, 6], "size": [2, 1.5, 2], "rot": 20},
+    {"type": "cylinder", "name": "stool", "pos": [1.5, 0, 5], "r": 0.7, "h": 1.6}
+  ]
+}
