@@ -124,22 +124,26 @@ def _as_parallel(P, v, wt, free, tol):
         a = mean(pin)
     return u if wt[pin].sum() >= 0.8 * wt[inl].sum() else None
 
-def find_vanishing_points(lines, W, H, tol=2.5, max_vps=3, min_lines=4, flag_tol=6.0, min_support=0.4, min_share=0.25):
+def find_vanishing_points(lines, W, H, tol=2.5, max_vps=3, min_lines=4, flag_tol=6.0, min_support=0.4, min_share=0.25,
+                          max_maybe=4, maybe_share=0.08):
     """group lines into families that share a vanishing point.
        min_support : a family's lines must add up to this many canvas widths, so a few short
                      strokes that happen to line up do not count.
        min_share   : and to this share of the linework not yet explained. Sketchy character lines
                      line up by chance all the time; real architecture carries far more ink.
+       Families that clear both bars are marked sure. Weaker ones (down to maybe_share) are kept as
+       "maybe" so a person can look at the picture and decide; numbers alone cannot tell a floor grid
+       from fingers that happen to fan out.
        Returns (families, assign): families = list of dicts {v (homogeneous, normalized coords),
-       xy (pixels, or None if the lines are parallel), lines (indices)}; assign[i] = family or -1."""
+       xy (pixels, or None if the lines are parallel), lines (indices), sure}; assign[i] = family or -1."""
     n = len(lines)
     if n < min_lines: return [], np.full(n, -1)
     P = _prep(lines, W, H); wt = P['len'] / P['len'].sum(); find_vanishing_points.dropped = 0
     need = min_support * W / (P['len'].sum() * P['s'])                 # support threshold in wt units
     top = np.argsort(-P['len'])[:160]
-    free = np.ones(n, bool); seedable = np.ones(n, bool); fams = []
-    for _ in range(max_vps + 2):
-        if len(fams) >= max_vps: break
+    free = np.ones(n, bool); seedable = np.ones(n, bool); fams = []; n_sure = n_maybe = 0
+    for _ in range(max_vps + max_maybe + 3):
+        if n_sure >= max_vps and n_maybe >= max_maybe: break
         cand_idx = [i for i in top if free[i] and seedable[i]]
         if len(cand_idx) < 2 or free.sum() < min_lines: break
         ii, jj = np.triu_indices(len(cand_idx), 1); ci = np.array(cand_idx)
@@ -164,16 +168,28 @@ def find_vanishing_points(lines, W, H, tol=2.5, max_vps=3, min_lines=4, flag_tol
         if par is not None:
             v = par; inl = (deviation(P, v)[0] < tol) & free
         idx = np.where(inl)[0]
-        if os.environ.get('ANIMTK_DEBUG'): print('family', 'parallel' if par is not None else 'point', len(idx), 'lines, share of free ink %.2f' % (wt[idx].sum() / wt[free].sum()))
-        if len(idx) < min_lines or wt[idx].sum() < max(need, min_share * wt[free].sum()):
+        if len(idx) == 0: break
+        share = wt[idx].sum() / wt[free].sum()
+        if os.environ.get('ANIMTK_DEBUG'): print('family', 'parallel' if par is not None else 'point', len(idx), 'lines, share of free ink %.2f' % share)
+        if len(idx) < min_lines:
+            seedable[idx] = False; continue
+        sure = wt[idx].sum() >= max(need, min_share * wt[free].sum())
+        if sure and n_sure < max_vps:
+            fams.append(dict(v=v, parallel=par is not None, sure=True)); free[idx] = False; n_sure += 1
+            seedable &= deviation(P, v)[0] > (12.0 if par is not None else flag_tol)   # near misses of this point never seed a new one
+        elif share >= maybe_share and n_maybe < max_maybe:
+            fams.append(dict(v=v, parallel=par is not None, sure=False)); free[idx] = False; n_maybe += 1
+            seedable &= deviation(P, v)[0] > (12.0 if par is not None else flag_tol)
+        else:
             seedable[idx] = False; find_vanishing_points.dropped += 1
-            if len(idx) == 0: break
-            continue
-        seedable &= deviation(P, v)[0] > (12.0 if par is not None else flag_tol)   # near misses of this point never seed a new one
-        fams.append(dict(v=v, parallel=par is not None)); free[idx] = False
     if not fams: return [], np.full(n, -1)
     D = np.stack([deviation(P, f['v'])[0] for f in fams]); OKb = np.stack([_beyond(P, f['v'])[0] for f in fams])
-    D2 = np.where(OKb, D, 999); assign = np.argmin(D2, 0); assign[D2.min(0) >= tol] = -1
+    D2 = np.where(OKb, D, 999); sure = np.array([f['sure'] for f in fams])
+    assign = np.full(n, -1)
+    for mask in (sure, ~sure):                              # sure families claim their lines first
+        if not mask.any(): continue
+        ks = np.where(mask)[0]; sub = D2[ks]; best = ks[np.argmin(sub, 0)]; okl = (sub.min(0) < tol) & (assign < 0)
+        assign[okl] = best[okl]
     keep = []
     for k, f in enumerate(fams):
         idx = np.where(assign == k)[0]
@@ -195,33 +211,41 @@ def find_vanishing_points(lines, W, H, tol=2.5, max_vps=3, min_lines=4, flag_tol
         f['looseness'] = float(1.4826 * np.median(band)) if len(band) else 0.0   # how wobbly the drawing is around this point
     return fams, assign
 
-def analyze(lines, W, H, tol=2.5, flag_tol=6.0, flag_len=None, max_vps=3, default_fov=60.0, max_flags=8, min_share=0.25):
+def analyze(lines, W, H, tol=2.5, flag_tol=6.0, flag_len=None, max_vps=3, default_fov=60.0, max_flags=8, min_share=0.25, pick=()):
     """full read of a drawing's perspective. Returns a plain dict ready for JSON.
-       A line gets flagged when it runs close to a family but is clearly further off than that family's
-       own wobble (so a loose sketch is not punished for being loose). Only the worst max_flags are kept."""
+       A line gets flagged when it runs close to a sure family but is clearly further off than that
+       family's own wobble (so a loose sketch is not punished for being loose). Only the worst
+       max_flags are kept. pick = numbers of "maybe" groups to trust (after looking at the picture)."""
     lines = np.asarray(lines, float); n = len(lines)
     flag_len = W * 0.06 if flag_len is None else flag_len
     fams, assign = find_vanishing_points(lines, W, H, tol, max_vps, flag_tol=flag_tol, min_share=min_share)
     dropped = getattr(find_vanishing_points, 'dropped', 0)
     out = dict(canvas=[W, H], vanishing_points=[], horizon=None, lines=[], flags=[], notes=[], camera=None)
     c = np.array([W / 2, H / 2])
+    maybes = sorted([k for k in range(len(fams)) if not fams[k]['sure']], key=lambda k: -fams[k]['weight'])
+    for num, k in enumerate(maybes, 1):
+        fams[k]['maybe_no'] = num
+        if num in pick: fams[k]['sure'] = True; fams[k]['picked'] = True
     for f in fams:
         a = abs(((f['angle'] + 90) % 180) - 90)                   # 0 = horizontal lines, 90 = vertical lines
         if f['xy'] is None: kind = 'vertical' if a > 62 else 'parallel'
         elif a > 62 and abs(f['xy'][1] - c[1]) > H * 0.75: kind = 'vertical'
         else: kind = 'vp'
         f['kind'] = kind
-    order = sorted(range(len(fams)), key=lambda k: (fams[k]['kind'] != 'vp', -fams[k]['weight']))
+    order = sorted(range(len(fams)), key=lambda k: (not fams[k]['sure'], fams[k]['kind'] != 'vp', -fams[k]['weight']))
     names = {}; nvp = 0; seen = {}
     for k in order:
         f = fams[k]
-        if f['kind'] == 'vp': nvp += 1; nm = 'VP%d' % nvp
+        if not f['sure']: nm = 'maybe %d' % f['maybe_no']
+        elif f['kind'] == 'vp': nvp += 1; nm = 'VP%d' % nvp
         elif f['kind'] == 'vertical': nm = 'verticals' if f['xy'] is None else ('VP up' if f['xy'][1] < c[1] else 'VP down')
         else: nm = 'parallels'
         seen[nm] = seen.get(nm, 0) + 1
         names[k] = nm if seen[nm] == 1 else '%s %d' % (nm, seen[nm])
-        out['vanishing_points'].append(dict(name=names[k], kind=f['kind'], xy=f['xy'], line_angle=round(f['angle'], 2),
+        out['vanishing_points'].append(dict(name=names[k], kind=f['kind'], sure=bool(f['sure']), xy=f['xy'], line_angle=round(f['angle'], 2),
                                             line_count=len(f['lines']), looseness_deg=round(f['looseness'], 2)))
+    all_fams = fams; all_names = names
+    sure_k = [k for k in range(len(fams)) if fams[k]['sure']]
     P = _prep(lines, W, H) if n else None
     D = np.stack([deviation(P, f['v'])[0] for f in fams]) if fams else np.zeros((0, n))
     ln = np.hypot(lines[:, 2] - lines[:, 0], lines[:, 3] - lines[:, 1]) if n else np.zeros(0)
@@ -230,8 +254,8 @@ def analyze(lines, W, H, tol=2.5, flag_tol=6.0, flag_len=None, max_vps=3, defaul
         rec = dict(id=i, xyxy=[round(float(v), 1) for v in lines[i]], group=None, off_deg=None)
         if assign[i] >= 0:
             rec['group'] = names[int(assign[i])]; rec['off_deg'] = round(float(D[assign[i], i]), 2)
-        elif fams:
-            k = int(np.argmin(D[:, i]))
+        elif sure_k:
+            k = sure_k[int(np.argmin(D[sure_k, i]))]
             if max(tol, 3 * fams[k]['looseness']) < D[k, i] <= flag_tol and ln[i] >= flag_len:
                 miss = None
                 if fams[k]['xy'] is not None:
@@ -246,9 +270,10 @@ def analyze(lines, W, H, tol=2.5, flag_tol=6.0, flag_len=None, max_vps=3, defaul
         out['notes'].append('%d more lines are a little off; only the %d that stand out most are marked.' % (len(cands) - max_flags, max_flags))
     for f in out['flags']: out['lines'][f['line']]['flag'] = dict(near=f['near'], off_deg=f['off_deg'], miss_px=f['miss_px'])
     # horizon
-    vps = [fams[k] for k in order if fams[k]['kind'] == 'vp']
-    par = [f for f in fams if f['kind'] == 'parallel']
-    ver = [f for f in fams if f['kind'] == 'vertical']
+    vps = [fams[k] for k in order if fams[k]['kind'] == 'vp' and fams[k]['sure']]
+    par = [f for f in fams if f['kind'] == 'parallel' and f['sure']]
+    ver = [f for f in fams if f['kind'] == 'vertical' and f['sure']]
+    sure_f = [f for f in fams if f['sure']]; n_maybe = len(fams) - len(sure_f)
     hz = None
     if len(vps) >= 2:
         p, q = np.array(vps[0]['xy']), np.array(vps[1]['xy'])
@@ -277,17 +302,17 @@ def analyze(lines, W, H, tol=2.5, flag_tol=6.0, flag_len=None, max_vps=3, defaul
         out['camera'] = cam.to_dict(); out['notes'] += notes
         if side is None:
             out['notes'].append('One vanishing point only, so lens width is a guess (%.0f). Set it by eye in the app or with --fov.' % default_fov)
-    elif (par or ver) and all(f['xy'] is None for f in fams):
+    elif (par or ver) and all(f['xy'] is None for f in sure_f):
         tilt = [f for f in par if abs(((f['angle'] + 90) % 180) - 90) < 28]
         out['notes'].append('Lines run side by side instead of meeting, so this reads as a flat-on view: no vanishing point or horizon to find.')
         if tilt: out['notes'].append('The level lines lean %.1f degrees (0 = dead level).' % tilt[0]['angle'])
         if ver: out['notes'].append('The upright lines lean %.1f degrees off straight up.' % (90 - abs(ver[0]['angle'])))
-    elif not fams:
-        out['notes'].append('Not enough long straight lines that agree with each other to find a vanishing point. '
+    elif not sure_f:
+        out['notes'].append('No group of straight lines is strong enough to call a vanishing point for sure. '
                             'For a board that is mostly characters, mark the perspective by hand in the app instead.')
-    if dropped:
-        out['notes'].append('%d weaker line-ups were left out because they look like chance (few lines, mostly character strokes). '
-                            'Use --min-share 0.1 to see them.' % dropped)
+    if n_maybe:
+        out['notes'].append('%d possible groups are drawn as "maybe": too little ink behind them to be sure (arms and fingers fan out too). '
+                            'Look at the picture; if one is right, rerun with --pick and its number.' % n_maybe)
     return out
 
 def _hang(d):
