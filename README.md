@@ -1,85 +1,280 @@
 # animation-toolkit
 
-Tools for 2D animation boards and frames (PNG, 3840x1920 canvas; frame sequences are numbered PNGs in a folder).
-One offline app plus Python scripts a Claude can run on drawings.
+Tools for hand-drawn 2D animation: perspective, timing, inbetweens, camera moves, lip sync, value and
+anatomy checks, and a shot tracker updater. One offline app for the artist, plus Python scripts a Claude
+(or anyone) can run on boards and frames.
 
-**Status: phases 1 and 2 of 4 are built (perspective, timing, inbetweens, motion check, cycles).**
-Camera, value, anatomy, lip sync and the tracker come next. This README gets its full "learn it in one read"
-version in phase 4.
+**If you are a Claude: this page is the whole manual. Read it once, then use the tools.**
 
-## Rules the tools follow
+Drawings are PNGs on a 3840 x 1920 canvas. A frame sequence is a folder of numbered PNGs (`0001.png`, `0002.png`, ...).
+Other sizes work; 3840 x 1920 is just the default.
 
-- Originals are never edited or overwritten. Every output is a new file in an `out/` folder.
-- Guides and warps only. Nothing here redraws linework.
-- Artwork, frames, audio and spreadsheets are git-ignored. Never commit them: this repo is public.
+## Rules every tool follows (keep them when you add one)
+
+1. **Originals are never edited or overwritten.** Every output is a new file, by default under `out/<tool>/`.
+   `animtk/imgio.py` refuses to save over anything it loaded.
+2. **Guide or warp, never redraw.** The tools draw guides on transparent layers, measure, or bend the artist's own
+   lines. Nothing here replaces linework with generated drawings.
+3. **A flag means "look here", not "this is wrong".** The tools only see ink and numbers. Stylized perspective
+   (wide, bowed, tilted rooms) and stylized proportions are choices, so report flags as questions.
+4. **This repo is public. Never commit artwork, frames, audio, mouth charts or spreadsheets.** `.gitignore` blocks
+   every image, audio, video and spreadsheet type plus `samples/`, `out/`, `tools/`. Do not force-add past it.
+5. **Ask the artist before pushing**, and ask where the shot tracker lives before touching it.
 
 ## Setup
 
-    pip install -r requirements.txt
+    pip install -r requirements.txt        # numpy, opencv-python, pillow, scipy, openpyxl  (Python 3.10+)
+    python lip_sync.py --setup             # only for lip sync: downloads Rhubarb Lip Sync into tools/rhubarb (about 90 MB)
 
-Python 3.10+. The app needs nothing: open `animation_app.html` in a browser.
+The app needs nothing installed: open `animation_app.html` in Chrome or Edge. It works offline and no file leaves the computer.
 
-## What is here now
+## Which tool for which job
 
-| Tool | What it does |
+| The artist says | Use |
 |---|---|
-| `animation_app.html` | **Perspective mode:** upload a board, drag lines to find vanishing points and the horizon, lens sliders (Dutch tilt, fisheye, lens width, stylized skew) with one-click looks, 3D blockout props, transparent guide PNG export. **Timing mode:** load a frame sequence, play at 24 fps on 1s/2s with a hold per drawing, onion skin, key/breakdown/inbetween marks, timing chart, audio waveform with accents, x-sheet CSV and preview GIF export. |
-| `perspective_check.py` | Finds straight lines on a board, groups them into vanishing points, finds the horizon, flags lines that miss. |
-| `scene_render.py` | Renders a 3D blockout scene (JSON) through a virtual camera: clean reference + transparent guide. |
-| `inbetween.py` | Inbetweens by bending the real linework of two keys (thin-plate spline) along a path with ease in/out. Writes a placement guide instead when the poses are too different to bend. |
-| `motion_check.py` | Reviews a frame sequence: arcs, spacing, pops, size changes, missing breakdowns. Annotated contact sheet. |
-| `cycle_guide.py` | Stick-skeleton reference for cycles, sized to the character. Cat walk so far. |
-| `animtk/` | Shared code: camera and props (`scene3d.py`), lines and vanishing points (`lines.py`), frame measuring (`frames.py`), matching and warping (`warp.py`), cycles (`cycles.py`), safe file handling (`imgio.py`). |
+| "Is my perspective right?" / "find the vanishing points" | `perspective_check.py`, or Perspective mode in the app to mark it by hand |
+| "Block out this room / prop so I can draw over it" | `scene_render.py`, or the props in Perspective mode |
+| "Make me an inbetween" | `inbetween.py` |
+| "Does this shot move right?" (arcs, spacing, pops) | `motion_check.py` |
+| "Help me time this" / x-sheet / onion skin / waveform | Timing mode in the app |
+| "I need a walk cycle reference" | `cycle_guide.py` |
+| "How big does the background need to be for this pan or zoom?" | `camera_move.py`, or Camera mode in the app |
+| "Does this pose read?" / silhouette / values | `value_check.py`, or Value mode in the app |
+| "Check the proportions / balance / this hand / this cat" | `anatomy_guide.py` |
+| "Which mouth goes on which frame?" | `lip_sync.py` |
+| "Mark shot 12 as cleaned up" | `tracker_update.py` |
 
-## Commands
+Every script prints a short plain summary and the list of files it saved. Run any script with `-h`, or read the
+comment at the top of the file, for every option.
 
-    python perspective_check.py BOARD.png [--out DIR] [--region x0,y0,x1,y1] [--ignore x0,y0,x1,y1] [--pick N] [--fov 60]
-        -> BOARD_check.png (look at this first), BOARD_guide.png (transparent), BOARD_check.json
+---
 
-    python scene_render.py SCENE.json [--out DIR] [--board BOARD.png] [--camera CHECK_OR_APP.json] [--wobble]
-        -> SCENE_reference.png, SCENE_guide.png (transparent), SCENE_over_board.png (with --board)
+## The app: `animation_app.html`
+
+One self-contained file, four tabs. Load files with the buttons or by dragging them onto the picture.
+
+**Perspective.** Load a board. Drag lines along edges that go back in space: two or more lines per direction give a
+vanishing point, and two vanishing points give the horizon and the lens. Sliders: Dutch tilt, fisheye, lens width,
+stylized skew, with one-click looks (straight, wide, bendy, fisheye, high, low). Add 3D blockout props that sit on the
+perspective: boxes, cylinders, bottles, jars, shelves, cabinets, doors with a real hinge swing. Exports a transparent
+guide PNG at full canvas size, and saves or loads a scene JSON (the same format `scene_render.py` reads; it also opens
+the `_check.json` from `perspective_check.py`).
+
+**Timing.** Load a frame sequence. Plays at 24 fps (12, 25, 30 too), everything on 1s, 2s or 3s, with a hold per
+drawing. Onion skin with separate before and after counts. Mark keys, breakdowns and inbetweens (K, B, I); the timing
+chart shows where the drawings fall between keys, measured from how far the lines move. Load audio to see its waveform
+under the frames with a tick on every accent. Exports an x-sheet CSV (frame, time, drawing, file, type, hold, sound
+level, accent) and a preview GIF.
+
+**Camera.** Type or drag camera keys (frame, center X, center Y, zoom %, easing). Shows the canvas size needed so the
+move never runs off the edge, the path, what the camera sees on any frame, and a table with one row per frame: camera
+center on the canvas, canvas layer scale and position for the comp, and where to place a drawing made for that frame.
+A key can carry its drawing so keys can be lined up by eye. Exports the table as CSV (same columns as
+`camera_move.py`), a plan picture, and a move file that `camera_move.py --json` opens.
+
+**Value.** Load frames. Shows a pure black silhouette beside the grayscale. Line art: closes small gaps and fills the
+figure; click any patch to flip it between black and white. Painted frames: darker than a cutoff. Transparent
+backgrounds: used directly. Grayscale can be squashed to 2 to 5 values. Flip, stack, and full-size PNG export.
+
+---
+
+## The scripts
+
+### perspective_check.py: vanishing points, horizon, lines that miss
+
+    python perspective_check.py BOARD.png [--region x0,y0,x1,y1] [--ignore x0,y0,x1,y1] [--pick N] [--fov 60] [--out DIR]
+
+Out: `BOARD_check.png` (look at this first), `BOARD_guide.png` (transparent guide), `BOARD_check.json`.
+
+It reads every long straight stroke, so arms and props can pull it off. Groups with little ink behind them are drawn
+thin and named "maybe 1", "maybe 2": if the picture shows one is real, rerun with `--pick` and its number. Mask
+characters with `--ignore`. On a board that is mostly characters, mark the perspective by hand in the app instead.
+
+### scene_render.py: 3D blockout through a virtual camera
+
+    python scene_render.py SCENE.json [--board BOARD.png] [--camera CHECK_OR_APP.json] [--wobble] [--no-labels] [--out DIR]
+
+Out: `SCENE_reference.png`, `SCENE_guide.png` (transparent), `SCENE_over_board.png` (with `--board`).
+The scene format is described at the top of the script; `examples/room_scene.json` is a starting point. The camera
+can be regular, fisheye or anything between (`k`: 1 = regular, 0.02 = full fisheye), with tilt and skew.
+
+### inbetween.py: inbetweens made from the two keys' own lines
 
     python inbetween.py KEY_A.png KEY_B.png [-n 1] [--ease inout|in|out|linear] [--at 0.33,0.66] [--arc dx,dy]
                         [--source nearest|a|b] [--region x0,y0,x1,y1] [--force] [--guide-only] [--out DIR]
-        -> A_B_inb01.png ... (only when the bend is clean), A_B_guide.png (transparent), A_B_preview.png, A_B_report.json
-        prints WARPED or GUIDE ONLY with the reason
+
+Out: `A_B_inb01.png ...` (only when the bend is clean), `A_B_guide.png` (transparent), `A_B_preview.png`, `A_B_report.json`.
+Prints **WARPED** or **GUIDE ONLY** with the reason.
+
+Only strokes that move are bent; lines that hold still are left exactly as they are. It tests itself by bending key A
+all the way onto key B, and refuses (guide only) when lines do not land, when parts would stretch or squash too far,
+or when the bend folds over. Close poses of the same drawing get the warp. Storyboard beats usually get the guide,
+which shows where the inbetween should sit and how far along the arc.
+
+### motion_check.py: arcs, spacing, pops
 
     python motion_check.py FRAMES_FOLDER [--region ...] [--ignore ...] [--all-ink] [--max-flags 6] [--out DIR]
-        -> FOLDER_motion.png (contact sheet with marks, path, spacing chart), FOLDER_motion.json
+
+Out: `FOLDER_motion.png` (contact sheet with numbered marks, the path of action, a spacing chart), `FOLDER_motion.json`.
+Flags: ARC (a frame off the path), SPACING (an uneven jump), POP (a shape that changes suddenly), SIZE, and
++ BREAKDOWN (a gap that wants a drawing). On key poses or boards it says so and marks only the biggest jumps.
+
+### cycle_guide.py: stick references for cycles
 
     python cycle_guide.py cat_walk [--frames 12] [--match CHARACTER.png --region x0,y0,x1,y1] [--length PX]
                                    [--at X,GROUND_Y] [--facing right|left] [--travel] [--out DIR]
-        -> cat_walk_01.png ... (transparent, canvas size), cat_walk_sheet.png, cat_walk.json
+    python cycle_guide.py --list
 
-Default output folders: `out/<tool>/...`. Every script prints a short summary and the files it saved.
+Out: `cat_walk_01.png ...` (transparent, canvas size), `cat_walk_sheet.png`, `cat_walk.json`.
+To add a cycle, write a `pose(phase, near)` function in `animtk/cycles.py` and add it to `CYCLES`.
 
-### Reading the results
+### camera_move.py: canvas size and per-frame table for a pan or zoom
 
-- `perspective_check.py` reads every long straight stroke, so arms and props can pull it off. Look at `_check.png`
-  before trusting the numbers. Groups with little ink behind them are drawn thin and named "maybe 1", "maybe 2":
-  if the picture shows one is the real thing, rerun with `--pick` and its number. Mask characters with `--ignore`.
-  On a board that is mostly characters, mark the perspective by hand in the app instead.
-- `inbetween.py` only bends strokes that move; lines that hold still are left exactly as they are. It decides
-  by bending key A all the way to key B and checking the result. It refuses (guide only) when lines do not land,
-  when parts would stretch or squash too far, or when the bend folds over. Storyboard beats usually get the guide;
-  close poses of the same drawing get the warp.
-- `motion_check.py` only sees where ink is. Every flag means "look here". On key poses or boards it says so and
-  marks just the biggest jumps, because arcs and spacing need drawings that flow into each other.
+    python camera_move.py --key 1,0,0,100 --key 25,1900,0,100 --key 49,1900,-200,160 [--name shot]
+    python camera_move.py --images 1:KEY_A.png 25:KEY_B.png
+    python camera_move.py --json MOVE.json                      (a move saved from the app)
+      [--size 3840x1920] [--ease inout|in|out|linear] [--margin 0.05] [--out DIR]
 
-Scene JSON format: see the top of `scene_render.py`, and `examples/`. The app's "Save scene" writes the
-same format, and the app loads a `_check.json` too, so the three perspective tools pass work between each other.
+A key is `frame,x,y,zoom%`: where the camera center is in field pixels at 100% (right and down are positive, the first
+key is usually 0,0) and how far it is pushed in (200 = twice the size).
 
-### Adding a cycle
+Out: `NAME_camera.csv`, `NAME_plan.png`, `NAME_camera.json`. Prints `CANVAS NEEDED: W x H px`.
 
-Write a `pose(phase, near)` function in `animtk/cycles.py` that returns a `Pose` (joints, bones, feet down), and
-add it to `CYCLES`. The drawing, sizing, contact sheet and JSON come for free. See the notes at the top of that file.
+CSV columns, one row per frame: `frame, x, y, zoom` (the camera); `canvas_cx, canvas_cy` (camera center on the big
+canvas); `view_w, view_h` (how much canvas it sees); `layer_scale, layer_x, layer_y` (scale % and center position to
+give the canvas layer in a field-sized comp); `place_x, place_y, place_scale` (top-left corner and scale % for a
+field-sized drawing made for that frame, placed on the big canvas: this is where a character layer goes).
+The canvas is sized so the tightest zoom still has one canvas pixel per finished pixel.
+
+`--images` reads the pan and zoom off the lines two key drawings share (the background) and says how sure it is:
+good, shaky, or NOT reliable. It is fooled when a character fills the frame, and cannot read keys that share less
+than about half a frame. When it is not "good", type `--key` numbers instead.
+
+### value_check.py: silhouette and grayscale
+
+    python value_check.py FRAME.png            -> FRAME_value.png (silhouette | grayscale), FRAME_silhouette.png
+    python value_check.py FRAMES_FOLDER        -> FOLDER_value_sheet.png (original, silhouette, grayscale per frame), FOLDER_value.json
+      [--mode auto|lines|tone|alpha] [--gap 4] [--threshold N] [--levels 3] [--edge auto|open]
+      [--fill X,Y ...] [--clear X,Y ...] [--frames 1,5,9] [--each] [--out DIR]
+
+Line art is filled by closing small gaps and blacking in whatever the outside paper cannot reach. Look at the result:
+if the black leaked out, raise `--gap`; if a part of the figure stayed white or some background turned black, fix it
+with `--fill X,Y` or `--clear X,Y` (full-size pixel of any point inside that patch), or `--edge open`. A body that
+leaves the frame through one edge is filled automatically; one that leaves through a corner needs `--fill`.
+For painted frames it also prints how far apart figure and background are in value (0 to 100; under 15 = look here).
+
+### anatomy_guide.py: proportion and balance guide
+
+It cannot find joints by itself. You (the Claude) place them:
+
+    python anatomy_guide.py DRAWING.png --grid [--region x0,y0,x1,y1]     1. writes DRAWING_grid.png with a numbered pixel grid. Open it and read off the joints.
+    python anatomy_guide.py --template human|cat|hand                     2. prints a blank landmark file (also in examples/anatomy_*.json). Fill in "points" as [x, y]; leave hidden ones null.
+    python anatomy_guide.py DRAWING.png --landmarks POINTS.json [--model MODEL_POINTS.json] [--max-flags 6]
+
+Out: `DRAWING_anatomy_guide.png` (transparent overlay: bones, joints, plumb line, numbered marks),
+`DRAWING_anatomy_over.png` (overlay on the faded drawing with the notes written out), `DRAWING_anatomy.json`.
+
+Checks. **human:** left limb against right, heads tall, shoulder tilt against hip tilt, line of action, weight over
+the feet (set `"airborne": true` for jumps, or give `"support"` points when sitting or leaning). **cat** (side view):
+elbow, knee and hock bending the right way, near legs against far legs, hind legs against front legs, weight between
+the planted paws. **hand:** knuckles on one arc, finger length order, segments shortening toward the tip, wrist against
+palm. Everything is measured against the drawing itself. `--model` adds "off model" checks against the same character
+marked up on a model sheet. The results are only as good as the landmarks: use `--region` to zoom the grid on small
+parts, and say so when a view (three-quarter, foreshortened) makes a check unreliable.
+
+### lip_sync.py: a mouth shape for every frame
+
+    python lip_sync.py LINE.wav [--text "the words spoken"] [--fps 24] [--start 1] [--on 2] [--mouths MOUTH_FOLDER]
+                                [--recognizer phonetic] [--rough] [--out DIR]
+
+Out: `LINE_lipsync.csv` (frame, time_s, mouth, shape, new, holds), `LINE_lipsync.png` (waveform with the mouth letter
+under every frame), `LINE_lipsync.json`. With `--mouths` (a folder of the artist's own mouth drawings named `A.png` to
+`F.png`, plus `G`, `H`, `X` if they exist): `LINE_mouths/0001.png ...` (her drawing for each frame, copied untouched)
+and `LINE_lipsync_preview.gif`.
+
+Mouth letters are Rhubarb's: A closed (M, B, P), B teeth together (most consonants, EE), C open (EH, AE), D wide open
+(AA), E slightly rounded (AO, ER), F puckered (UW, OW, W), G teeth on lip (F, V), H tongue up (L), X at rest.
+`--text` makes it noticeably more accurate. `--on 2` holds mouths for two frames but never drops a closed mouth.
+Needs a WAV (other formats only if ffmpeg is installed). English by default; `--recognizer phonetic` for other
+languages. Without Rhubarb, or with `--rough`, it guesses from loudness only and says so: fine for blocking, not final.
+
+### tracker_update.py: one shot's row in the tracker spreadsheet
+
+**Ask the artist where the tracker lives. Always `--show` first.**
+
+    python tracker_update.py TRACKER.xlsx --show                      sheet, header row, columns, dropdown choices, shots
+    python tracker_update.py TRACKER.xlsx --shot 012 --show           that shot's row
+    python tracker_update.py TRACKER.xlsx --shot 012 --set "Status=Cleanup" --set "Frames=48" --append "Notes=arc fixed on f12"
+      [--add] [--dry-run] [--in-place] [--out FILE] [--sheet NAME] [--key-column "Shot"] [--header-row N] [--force]
+
+It finds the header row and the shot column itself, matches `--set` columns to the tracker's own headers, and fits the
+value to the column (numbers, dates, the exact spelling of a dropdown choice). It refuses: a column the tracker does
+not have, a value outside a dropdown, a shot listed twice, a formula cell (unless `--force`), an unknown shot (unless
+`--add`, which adds a row under the last shot with the look, formulas and dropdown of the row above).
+
+After saving it reloads the result and compares every cell of every sheet with the original. If anything outside that
+one row differs, or a row is missing, it deletes the result and stops. So it cannot delete rows or overwrite other shots.
+
+By default the tracker file is left alone and the result is a new file beside it (`NAME_updated.xlsx`, then
+`_updated2`, ...). `--in-place` updates the tracker itself after putting a dated copy in `tracker_backups/` beside it.
+Use whichever the artist asked for.
+
+---
+
+## How the tools pass work to each other
+
+- `perspective_check.py` -> `_check.json` -> opens in the app (Perspective) and in `scene_render.py --camera`.
+- App "Save scene" <-> `scene_render.py SCENE.json`.
+- App Camera "Save move" -> `camera_move.py --json`. Both write the same CSV columns.
+- App Value: clicks are shown as `--fill` / `--clear` flags to paste into `value_check.py`.
+- App Timing x-sheet CSV and `lip_sync.py` CSV both count frames from 1 at the same fps, so the mouth column lines up
+  with the x-sheet rows (`--start` shifts it when the line starts later in the shot).
+- `motion_check.py` says where a breakdown is missing -> `inbetween.py` on those two frames.
+
+## Layout
+
+    animation_app.html       the app (plain HTML and JavaScript, no build step)
+    *.py                     the scripts above
+    animtk/                  shared code
+        imgio.py             loading and saving that never overwrites an input
+        scene3d.py           camera, props, rendering        (mirrored in the app: CORE block)
+        lines.py             line finding, vanishing points
+        frames.py            ink masks, what moved between frames
+        warp.py              point matching and thin-plate-spline bending
+        cycles.py            cycle poses
+        cammove.py           camera move math                (mirrored in the app: CAM block)
+        value.py             silhouette and grayscale        (mirrored in the app: VAL block)
+        anatomy.py           rigs and checks
+    examples/                a sample scene, blank landmark files
+    tests/                   see below
+    samples/ out/ tools/     git-ignored: artwork, results, Rhubarb
+
+Math that exists in both Python and the app is kept identical on purpose and tested against each other. If you change
+one side, change the other and run the matching test.
 
 ## Tests
 
-    python tests/test_perspective.py     # generated rooms
-    python tests/test_motion.py          # inbetween, motion_check, cycle_guide on generated drawings
-    node tests/test_app_core.mjs         # app camera math matches the Python library
-    node tests/test_app_ui.mjs           # perspective mode in headless Chrome (needs: npm i puppeteer-core)
-    node tests/test_app_timing.mjs       # timing mode in headless Chrome, generated frames and sound
+None of them need artwork: they generate their own stand-ins into `tests/out/`.
 
-None of the tests need artwork.
+    python tests/test_perspective.py     # vanishing points on generated rooms
+    python tests/test_motion.py          # inbetween, motion_check, cycle_guide
+    python tests/test_phase3.py          # camera_move, value_check, anatomy_guide
+    python tests/test_phase4.py          # lip_sync (Rhubarb parts skip if it is not installed), tracker_update
+    node tests/test_app_core.mjs         # app camera math equals Python
+    node tests/test_app_ui.mjs           # Perspective mode in headless Chrome
+    node tests/test_app_timing.mjs       # Timing mode
+    node tests/test_app_camera.mjs       # Camera and Value modes, and their math against Python
+
+The three browser tests need `npm i puppeteer-core` (it drives the Chrome or Edge already installed).
+
+## Known limits (say these out loud when they apply)
+
+- Vanishing points: character linework can look like perspective. Trust the `_check.png`, not just the numbers.
+- Inbetweens: only close poses bend cleanly. Most key-to-key pairs get a guide, by design.
+- Motion check and the timing chart measure ink, not meaning: a redrawn background reads as movement.
+- Camera move from drawings: it follows whatever lines the two drawings share, which is the character if the character fills the frame.
+- Silhouette of line art: which closed shapes are "figure" is a guess when the figure leaves the frame; check the picture.
+- Anatomy: depends entirely on where the joints were placed. Foreshortening explains many flags.
+- Lip sync: English recognition by default; a computer cannot hear acting, so treat the result as a first pass to adjust.
+- Tracker: a save through this tool rebuilds charts (they can lose styling) and drops drawn shapes, text boxes,
+  slicers and sparklines. It warns when the workbook has any, and refuses `--in-place` without `--force`.

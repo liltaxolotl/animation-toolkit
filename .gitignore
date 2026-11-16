@@ -36,3 +36,6 @@ node_modules/
 package-lock.json
 package.json
 .vscode/
+
+# downloaded helper programs (Rhubarb Lip Sync)
+tools/
