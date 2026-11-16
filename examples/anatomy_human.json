@@ -1,0 +1,40 @@
+{
+ "rig": "human",
+ "about": "A person, any pose. l_ and r_ are the character's own left and right; if you cannot tell, just stay consistent.",
+ "points": {
+  "head_top": null,
+  "chin": null,
+  "neck": null,
+  "l_shoulder": null,
+  "r_shoulder": null,
+  "l_elbow": null,
+  "r_elbow": null,
+  "l_wrist": null,
+  "r_wrist": null,
+  "l_hand": null,
+  "r_hand": null,
+  "pelvis": null,
+  "l_hip": null,
+  "r_hip": null,
+  "l_knee": null,
+  "r_knee": null,
+  "l_ankle": null,
+  "r_ankle": null,
+  "l_toe": null,
+  "r_toe": null
+ },
+ "help": {
+  "head_top": "top of the skull",
+  "chin": "bottom of the chin",
+  "neck": "pit of the neck, between the collar bones",
+  "l_shoulder": "shoulder joint",
+  "l_hand": "fingertips (optional)",
+  "pelvis": "bottom of the torso, between the legs",
+  "l_hip": "hip joint, top of the thigh",
+  "l_toe": "tip of the foot (optional)"
+ },
+ "options": {
+  "airborne": "true if the character is jumping, falling or held up (skips the balance check)",
+  "support": "optional [[x, y], [x, y]]: the two ends of whatever holds the character up, if it is not the feet (a chair seat, a hand on a wall)"
+ }
+}

@@ -1,0 +1,34 @@
+{
+ "rig": "hand",
+ "about": "One hand. Each finger is marked from the knuckle outward: _1 = the knuckle where it joins the palm, _2 and _3 = the next two joints, _tip = the fingertip. The thumb has thumb_1 (its base near the wrist), thumb_2, thumb_tip.",
+ "points": {
+  "wrist_a": null,
+  "wrist_b": null,
+  "thumb_1": null,
+  "thumb_2": null,
+  "thumb_3": null,
+  "thumb_tip": null,
+  "index_1": null,
+  "index_2": null,
+  "index_3": null,
+  "index_tip": null,
+  "middle_1": null,
+  "middle_2": null,
+  "middle_3": null,
+  "middle_tip": null,
+  "ring_1": null,
+  "ring_2": null,
+  "ring_3": null,
+  "ring_tip": null,
+  "pinky_1": null,
+  "pinky_2": null,
+  "pinky_3": null,
+  "pinky_tip": null
+ },
+ "help": {
+  "wrist_a": "edge of the wrist on the thumb side",
+  "wrist_b": "edge of the wrist on the little finger side",
+  "thumb_3": "(optional)"
+ },
+ "options": {}
+}

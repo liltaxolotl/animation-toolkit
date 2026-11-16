@@ -78,33 +78,63 @@ def check(p):
     return max(0.0, worst)
 
 # ----------------------------------------------------------------- reading a move off two key drawings
-def _soft(gray, width=480):
-    s = width / gray.shape[1]
-    g = cv2.resize(gray, (width, int(round(gray.shape[0] * s))), interpolation=cv2.INTER_AREA)
-    ink = (g < 140).astype(np.float32)
-    return cv2.GaussianBlur(ink, (0, 0), 2.0), s
+_EW = 480                                    # drawings are compared on copies this wide
+
+def _ink(gray):
+    s = _EW / gray.shape[1]
+    g = cv2.resize(gray, (_EW, int(round(gray.shape[0] * s))), interpolation=cv2.INTER_AREA)
+    return (g < 140).astype(np.uint8), s
+
+def _agreement(a, b, z, dx, dy, tol=2):
+    """lay B over A using a guessed move and count how much linework lands on linework.
+       Returns (score 0..1 above chance, share of the frame the two drawings have in common)."""
+    h, w = a.shape
+    M = np.float32([[1 / z, 0, w / 2 * (1 - 1 / z) - dx], [0, 1 / z, h / 2 * (1 - 1 / z) - dy]])
+    bw = cv2.warpAffine(b * 255, M, (w, h), flags=cv2.INTER_LINEAR) > 100
+    seen = cv2.warpAffine(np.full((h, w), 255, np.uint8), M, (w, h), flags=cv2.INTER_NEAREST) > 0
+    k = np.ones((2 * tol + 1, 2 * tol + 1), np.uint8)
+    am = (a > 0) & seen; bm = bw & seen; common = float(seen.mean())
+    if am.sum() < 40 or bm.sum() < 40: return 0.0, common
+    fat_a = cv2.dilate(am.astype(np.uint8), k) > 0; fat_b = cv2.dilate(bm.astype(np.uint8), k) > 0
+    def score(ink, fat):
+        hit = float((ink & fat).sum()) / ink.sum(); chance = float(fat[seen].mean())
+        return max(0.0, (hit - chance) / max(1e-6, 1 - chance))
+    return (score(am, fat_b) + score(bm, fat_a)) / 2, common
 
 def estimate(gray_a, gray_b, zooms=None):
     """how the camera moved between two key drawings, read from the lines they share (the background).
-       Returns dict(zoom_ratio, dx, dy, confidence):
+       Returns dict(zoom_ratio, dx, dy, confidence, common):
          zoom_ratio  zoom of B divided by zoom of A (1 = no zoom)
          dx, dy      how far the camera center moved from A to B, in A's field pixels at A's zoom
-         confidence  0..1. Under about 0.25, do not trust it: type the numbers in instead.
+         confidence  0..1: how much of the linework lands on linework once B is laid over A with this move
+                     (0 = no better than chance). 0.5 and up is a good match, under 0.3 do not trust it.
+         common      share of the frame the two drawings have in common after the move
        It can only see lines that are in both drawings and hold still in the world. A character moving
-       through the shot, or keys with nothing in common, will fool it."""
-    A, s = _soft(gray_a); B, _ = _soft(gray_b); h, w = A.shape
+       through the shot lowers the confidence; keys that share less than about half a frame cannot be read."""
+    a, s = _ink(gray_a); b, _ = _ink(gray_b); h, w = a.shape
+    A = cv2.GaussianBlur(a.astype(np.float32), (0, 0), 2.0); B = cv2.GaussianBlur(b.astype(np.float32), (0, 0), 2.0)
     win = cv2.createHanningWindow((w, h), cv2.CV_32F)
     zooms = np.exp(np.linspace(np.log(0.5), np.log(2.0), 29)) if zooms is None else np.asarray(zooms, float)
-    def try_zoom(z):
+    def slide(z):
         # undo B's extra zoom about the center, then see how well it slides onto A
         M = np.float32([[1 / z, 0, w / 2 * (1 - 1 / z)], [0, 1 / z, h / 2 * (1 - 1 / z)]])
-        Bz = cv2.warpAffine(B, M, (w, h), flags=cv2.INTER_LINEAR)
-        (dx, dy), resp = cv2.phaseCorrelate(A, Bz, win)
+        (dx, dy), resp = cv2.phaseCorrelate(A, cv2.warpAffine(B, M, (w, h), flags=cv2.INTER_LINEAR), win)
         return resp, dx, dy
-    res = [(try_zoom(z), z) for z in zooms]
-    (resp, dx, dy), z = max(res, key=lambda t: t[0][0])
-    for z2 in np.exp(np.linspace(np.log(z / 1.05), np.log(z * 1.05), 9)):       # refine around the best
-        r2 = try_zoom(z2)
-        if r2[0] > resp: (resp, dx, dy), z = r2, z2
-    # phaseCorrelate gives the shift that moves A onto B: content moved by (dx, dy), so the camera moved the other way
-    return dict(zoom_ratio=float(z), dx=float(-dx / s), dy=float(-dy / s), confidence=float(min(1.0, max(0.0, resp))))
+    def judge(z):
+        resp, dx, dy = slide(z); sc, common = _agreement(a, b, z, dx, dy)
+        return sc, common, dx, dy, z
+    rough = sorted(((slide(z)[0], z) for z in zooms), reverse=True)[:5]            # the five most promising zooms
+    best = max((judge(z) for _, z in rough), key=lambda t: t[0])
+    for span, n in ((1.05, 11), (1.012, 7)):                                        # then tighten the zoom around the winner
+        zc = best[4]
+        for z2 in np.exp(np.linspace(np.log(zc / span), np.log(zc * span), n)):
+            t = judge(z2)
+            if t[0] > best[0]: best = t
+    sc, common, dx, dy, z = best
+    # the slide moves A's lines onto B's: the picture moved by (dx, dy), so the camera moved the other way
+    return dict(zoom_ratio=float(z), dx=float(-dx / s), dy=float(-dy / s), confidence=float(min(1.0, sc)), common=float(common))
+
+def sureness(e):
+    """plain word for an estimate: 'good', 'shaky' or 'NOT reliable'"""
+    if e['confidence'] >= 0.5 and e['common'] >= 0.3: return 'good'
+    return 'shaky' if e['confidence'] >= 0.3 else 'NOT reliable'

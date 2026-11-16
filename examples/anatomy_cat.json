@@ -1,0 +1,50 @@
+{
+ "rig": "cat",
+ "about": "A cat seen roughly from the side. f_ = the front leg nearest to us, h_ = the hind leg nearest to us, ff_ and hf_ = the far legs (optional).",
+ "points": {
+  "nose": null,
+  "crown": null,
+  "nape": null,
+  "withers": null,
+  "rump": null,
+  "tail_base": null,
+  "tail_tip": null,
+  "chest": null,
+  "f_shoulder": null,
+  "f_elbow": null,
+  "f_wrist": null,
+  "f_paw": null,
+  "h_hip": null,
+  "h_knee": null,
+  "h_hock": null,
+  "h_paw": null,
+  "ff_elbow": null,
+  "ff_wrist": null,
+  "ff_paw": null,
+  "hf_knee": null,
+  "hf_hock": null,
+  "hf_paw": null
+ },
+ "help": {
+  "nose": "tip of the nose",
+  "crown": "top of the head between the ears",
+  "nape": "back of the skull, where the neck starts",
+  "withers": "top of the shoulders",
+  "rump": "top of the hips",
+  "chest": "bottom of the ribcage, just behind the front legs",
+  "f_shoulder": "front leg: shoulder joint, at the front of the chest",
+  "f_elbow": "elbow, up against the ribcage",
+  "f_wrist": "wrist, the joint that looks like a knee",
+  "f_paw": "where the paw touches down",
+  "h_hip": "hind leg: hip joint",
+  "h_knee": "knee, at the front of the thigh",
+  "h_hock": "hock, the heel that sticks out backward",
+  "h_paw": "where the paw touches down",
+  "ff_elbow": "far front leg",
+  "hf_knee": "far hind leg"
+ },
+ "options": {
+  "airborne": "true if the cat is mid-jump (skips the balance check)",
+  "planted": "optional list of the paws that are on the ground in this drawing, for example [\"f_paw\", \"hf_paw\"]. Default: every paw near the lowest one."
+ }
+}

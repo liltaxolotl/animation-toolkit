@@ -44,10 +44,11 @@ def keys_from_images(pairs, default_ease, W, H):
         g = imgio.load_gray(path); e = CM.estimate(prev, g); k = keys[-1]
         zoom = k['zoom'] * e['zoom_ratio']
         if abs(e['zoom_ratio'] - 1) < 0.03: zoom = k['zoom']                    # call a hair of zoom no zoom
-        keys.append(dict(frame=f, x=k['x'] + e['dx'] / k['zoom'], y=k['y'] + e['dy'] / k['zoom'], zoom=zoom, ease=default_ease))
-        sure = 'good' if e['confidence'] >= 0.45 else 'shaky' if e['confidence'] >= 0.25 else 'NOT reliable'
-        notes.append('frame %d to %d: camera moves %d right, %d down, zoom x%.2f  (match %s, %.2f)' % (pairs[0][0] if len(keys) == 2 else keys[-2]['frame'], f, e['dx'], e['dy'], e['zoom_ratio'], sure, e['confidence']))
-        if e['confidence'] < 0.25: notes.append('  -> the two drawings share too little still linework. Give --key numbers for this one instead.')
+        dx, dy = [0.0 if abs(v) < W * 0.004 else v for v in (e['dx'], e['dy'])]       # a few pixels of drift between hand-drawn keys is no move
+        keys.append(dict(frame=f, x=k['x'] + dx / k['zoom'], y=k['y'] + dy / k['zoom'], zoom=zoom, ease=default_ease))
+        sure = CM.sureness(e)
+        notes.append('frame %d to %d: camera moves %d right, %d down, zoom x%.2f  (match %s: %d%% of the lines agree)' % (keys[-2]['frame'], f, dx, dy, zoom / k['zoom'], sure, round(e['confidence'] * 100)))
+        if sure == 'NOT reliable': notes.append('  -> the two drawings share too little still linework. Give --key numbers for this one instead.')
         prev = g
     return keys, notes
 

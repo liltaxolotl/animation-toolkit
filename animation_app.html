@@ -53,6 +53,11 @@ input[type=number],input[type=text],select{width:100%;background:var(--bg);color
 .muted{color:var(--dim);font-size:12px}
 .soon{margin:auto;text-align:center;color:var(--dim)}
 .soon b{display:block;font-size:20px;color:var(--text);margin-bottom:6px}
+.ctab{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+.ctab th{position:sticky;top:0;background:var(--panel);color:var(--dim);font-weight:600;text-align:right;padding:4px 8px;white-space:nowrap;border-bottom:1px solid var(--line)}
+.ctab td{text-align:right;padding:2px 8px;border-bottom:1px solid #24222b;cursor:pointer}
+.ctab tr.key td{color:var(--accent);font-weight:700}
+.ctab tr.now td{background:var(--panel2)}
 </style>
 </head>
 <body>
@@ -221,8 +226,106 @@ input[type=number],input[type=text],select{width:100%;background:var(--bg);color
     </div>
   </div>
 </section>
-<section class="mode" id="mode-camera"><div class="soon"><b>Camera mode</b>Pan and zoom planning: canvas size, per-frame center and layer scale.<br>Coming in phase 3.</div></section>
-<section class="mode" id="mode-value"><div class="soon"><b>Value mode</b>Silhouette and grayscale side by side.<br>Coming in phase 3.</div></section>
+<!-- ============================== CAMERA MODE ============================== -->
+<section class="mode" id="mode-camera">
+  <div class="side">
+    <div class="card">
+      <h2>Field (the finished frame)</h2>
+      <div class="grid2"><div class="f2"><label>Width</label><input type="number" id="cW" value="3840" min="16" step="1"></div><div class="f2"><label>Height</label><input type="number" id="cH" value="1920" min="16" step="1"></div></div>
+      <div class="sl"><label>Spare room</label><input type="range" id="cMargin" min="0" max="25" step="1" value="0"><output></output></div>
+      <div class="muted">Spare room adds a safety border around the whole move.</div>
+    </div>
+    <div class="card">
+      <h2>Camera keys</h2>
+      <div class="plist" id="cKeys" style="max-height:190px"></div>
+      <div class="row" style="margin-top:8px"><button class="primary" id="cAdd" style="flex:1">Add key</button><button id="cDel">Delete</button></div>
+      <div class="grid3"><button data-cmove="pan">Pan</button><button data-cmove="push">Push in</button><button data-cmove="both">Pan + push</button></div>
+      <div class="muted" style="margin-top:6px">Drag a box to move that key. Scroll over the picture to zoom the selected key. Arrow keys nudge it.</div>
+    </div>
+    <div class="card">
+      <h2>Selected key</h2>
+      <div class="f2"><label>Frame</label><input type="number" id="cKF" min="1" step="1"></div>
+      <div class="f2"><label>Center X</label><input type="number" id="cKX" step="10"></div>
+      <div class="f2"><label>Center Y</label><input type="number" id="cKY" step="10"></div>
+      <div class="f2"><label>Zoom %</label><input type="number" id="cKZ" min="10" max="800" step="5"></div>
+      <div class="f2"><label>Leaves</label><select id="cKE"><option value="inout">slow out, slow in</option><option value="in">slow out (speeds up)</option><option value="out">slow in (settles)</option><option value="linear">even speed</option></select></div>
+      <div class="row"><button id="cImgBtn" style="flex:1">Load this key's drawing</button><button id="cImgClear" title="Remove the drawing">x</button></div>
+      <input type="file" id="cImg" accept="image/*" hidden>
+      <div class="muted">X and Y are field pixels at 100%, right and down are positive. 200% zoom = pushed in to twice the size. A drawing shows inside its box so the keys can be lined up by eye.</div>
+    </div>
+  </div>
+
+  <div class="stage" id="cStage" style="display:flex;flex-direction:column">
+    <div style="flex:1;position:relative;min-height:0"><canvas id="cView"></canvas><div class="hint" id="cHint">White = the canvas to draw. Coloured boxes = what the camera sees at each key. Dots = its center, one per frame.</div></div>
+    <div style="height:268px;border-top:1px solid var(--line);flex:none;display:flex;flex-direction:column;background:var(--bg)">
+      <div class="row" style="padding:4px 10px;margin:0;flex-wrap:nowrap"><button class="primary" id="cPlay" style="width:70px">Play</button><input type="range" id="cScrub" min="1" max="25" step="1" value="1" style="flex:1"><b id="cFrameLbl" style="min-width:110px;text-align:right"></b></div>
+      <div id="cTableWrap" style="flex:1;overflow:auto;min-height:0"><table class="ctab" id="cTable"></table></div>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h2>Canvas needed</h2>
+      <div id="cSize" style="font-size:24px;font-weight:800;color:var(--accent)"></div>
+      <div class="muted" id="cSizeInfo"></div>
+    </div>
+    <div class="card">
+      <h2>Through the camera</h2>
+      <canvas id="cPrev" width="536" height="268" style="width:100%;display:block;background:#fff;border-radius:8px"></canvas>
+    </div>
+    <div class="card">
+      <h2>This frame</h2>
+      <div id="cNow" style="white-space:pre-line;font-variant-numeric:tabular-nums"></div>
+    </div>
+    <div class="card">
+      <h2>Export</h2>
+      <button class="primary" id="cCsv" style="width:100%">Frame table (CSV)</button>
+      <div class="row"><button id="cPng" style="flex:1">Plan picture</button><button id="cSave" style="flex:1" title="Save the move so camera_move.py or this app can open it again">Save move</button></div>
+      <button id="cLoadBtn" style="width:100%">Open a saved move</button><input type="file" id="cLoad" accept=".json,application/json" hidden>
+      <div class="muted" id="cExportInfo"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== VALUE MODE ============================== -->
+<section class="mode" id="mode-value">
+  <div class="side">
+    <div class="card">
+      <h2>Frame</h2>
+      <div class="row"><button class="primary" id="vLoadBtn" style="flex:1">Load frames</button><button id="vPrev">&lt;</button><button id="vNext">&gt;</button></div>
+      <input type="file" id="vFiles" accept="image/*" multiple hidden>
+      <div class="muted" id="vInfo">Pick one frame or several. Arrow keys step through them.</div>
+    </div>
+    <div class="card">
+      <h2>Silhouette</h2>
+      <div class="f2"><label>Kind</label><select id="vMode"><option value="auto">Pick for me</option><option value="lines">Line art on paper</option><option value="tone">Painted or toned</option><option value="alpha">Transparent background</option></select></div>
+      <div class="sl" id="vGapRow"><label>Close gaps</label><input type="range" id="vGap" min="0" max="14" step="1" value="4"><output></output></div>
+      <div class="sl" id="vThrRow"><label>Darker than</label><input type="range" id="vThr" min="0" max="255" step="1" value="128"><output></output></div>
+      <label class="chk" id="vThrAutoRow"><input type="checkbox" id="vThrAuto" checked>Pick the cutoff for me</label>
+      <label class="chk" id="vEdgeRow"><input type="checkbox" id="vEdge" checked>Fill bodies cut off by the frame edge</label>
+      <div class="row"><button id="vReset" style="flex:1">Undo my clicks</button></div>
+      <div class="muted">Line art: click any patch in the silhouette to flip it between black and white. Raise "close gaps" if the black leaks out, lower it if fingers glue together.</div>
+    </div>
+    <div class="card">
+      <h2>Grayscale</h2>
+      <div class="f2"><label>Steps</label><select id="vLevels"><option value="0">Smooth</option><option value="2">2 values</option><option value="3">3 values</option><option value="4">4 values</option><option value="5">5 values</option></select></div>
+      <div class="muted">Squashing the picture into 3 values shows whether dark, middle and light each have their own clear shape.</div>
+    </div>
+    <div class="card">
+      <h2>View</h2>
+      <label class="chk"><input type="checkbox" id="vStack">Stack them (bigger pictures)</label>
+      <label class="chk"><input type="checkbox" id="vFlip">Flip left to right (fresh eyes)</label>
+      <label class="chk"><input type="checkbox" id="vOrig">Show the original instead of grayscale</label>
+    </div>
+    <div class="card">
+      <h2>Export</h2>
+      <button class="primary" id="vPng" style="width:100%">Save side by side (PNG)</button>
+      <button id="vSil" style="width:100%;margin-top:6px">Save silhouette only (PNG)</button>
+      <div class="muted" id="vExportInfo"></div>
+    </div>
+  </div>
+  <div class="stage" id="vStage"><canvas id="vView"></canvas><div class="readout" id="vReadout"></div></div>
+</section>
 
 <script>
 /*CORE-START*/
@@ -396,6 +499,140 @@ const AT = (() => {
            rayCam, ray, planePoint, vanishingPoint, solveFov, cameraFromVPs, lsqPoint, missOf, DEF, propLocal, propWorld, polyPieces };
 })();
 /*CORE-END*/
+</script>
+
+<script>
+/*CAM-START*/
+// Camera move math. Mirrors animtk/cammove.py (frames, plan, check) so the app and camera_move.py agree.
+const CamMath = (() => {
+  const r = (v, n) => { const k = Math.pow(10, n); return Math.round(v * k) / k; };
+  function ease(t, kind) {
+    t = Math.min(Math.max(t, 0), 1);
+    if (kind === 'linear') return t;
+    if (kind === 'in') return t * t;
+    if (kind === 'out') return 1 - (1 - t) * (1 - t);
+    return t * t * (3 - 2 * t);
+  }
+  const sorted = keys => keys.slice().sort((a, b) => a.frame - b.frame);
+  // camera per frame from first key to last: position eases in a straight line, zoom changes by equal ratios
+  function frames(keys) {
+    keys = sorted(keys); const out = [];
+    if (keys.length === 1) return [{ frame: Math.trunc(keys[0].frame), x: +keys[0].x, y: +keys[0].y, zoom: +keys[0].zoom }];
+    for (let i = 0; i < keys.length - 1; i++) {
+      const a = keys[i], b = keys[i + 1], f0 = Math.trunc(a.frame), f1 = Math.trunc(b.frame), last = i === keys.length - 2;
+      for (let f = f0; f < f1 + (last ? 1 : 0); f++) {
+        const e = ease((f - f0) / Math.max(1, f1 - f0), a.ease || 'inout');
+        out.push({ frame: f, x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e, zoom: a.zoom * Math.pow(b.zoom / a.zoom, e) });
+      }
+    }
+    return out;
+  }
+  // canvas size and one row per frame. Same field names as the Python version.
+  function plan(keys, W, H, margin) {
+    W = W || 3840; H = H || 1920; margin = margin || 0;
+    const fr = frames(keys); let zmax = 0, x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const f of fr) {
+      zmax = Math.max(zmax, f.zoom);
+      x0 = Math.min(x0, f.x - W / (2 * f.zoom)); x1 = Math.max(x1, f.x + W / (2 * f.zoom));
+      y0 = Math.min(y0, f.y - H / (2 * f.zoom)); y1 = Math.max(y1, f.y + H / (2 * f.zoom));
+    }
+    x0 -= margin * W; x1 += margin * W; y0 -= margin * H; y1 += margin * H;
+    const cw = Math.ceil((x1 - x0) * zmax / 2 - 1e-9) * 2, ch = Math.ceil((y1 - y0) * zmax / 2 - 1e-9) * 2;
+    const bcx = (x0 + x1) / 2, bcy = (y0 + y1) / 2, ox = bcx - cw / (2 * zmax), oy = bcy - ch / (2 * zmax);
+    const rows = fr.map(f => { const z = f.zoom; return {
+      frame: f.frame, x: r(f.x, 2), y: r(f.y, 2), zoom: r(z, 5),
+      canvas_cx: r((f.x - ox) * zmax, 1), canvas_cy: r((f.y - oy) * zmax, 1),
+      view_w: r(W / z * zmax, 1), view_h: r(H / z * zmax, 1),
+      layer_scale: r(z / zmax * 100, 3),
+      layer_x: r(W / 2 + (bcx - f.x) * z, 1), layer_y: r(H / 2 + (bcy - f.y) * z, 1),
+      place_x: r((f.x - W / (2 * z) - ox) * zmax, 1), place_y: r((f.y - H / (2 * z) - oy) * zmax, 1),
+      place_scale: r(zmax / z * 100, 3) }; });
+    return { field: [W, H], canvas: [cw, ch], zoom_max: r(zmax, 5), origin: [r(ox, 2), r(oy, 2)], margin,
+      keys: sorted(keys).map(k => ({ frame: Math.trunc(k.frame), x: +k.x, y: +k.y, zoom: +k.zoom, ease: k.ease || 'inout' })), rows };
+  }
+  // worst overhang past the canvas edge in pixels (0 = the move never runs off)
+  function check(p) {
+    const cw = p.canvas[0], ch = p.canvas[1]; let worst = 0;
+    for (const q of p.rows) worst = Math.max(worst, q.view_w / 2 - q.canvas_cx, q.canvas_cx + q.view_w / 2 - cw, q.view_h / 2 - q.canvas_cy, q.canvas_cy + q.view_h / 2 - ch);
+    return Math.max(0, worst);
+  }
+  const COLS = ['frame', 'x', 'y', 'zoom', 'canvas_cx', 'canvas_cy', 'view_w', 'view_h', 'layer_scale', 'layer_x', 'layer_y', 'place_x', 'place_y', 'place_scale'];
+  return { ease, frames, plan, check, COLS };
+})();
+/*CAM-END*/
+
+/*VAL-START*/
+// Silhouette math for line art. Mirrors animtk/value.py (regions, outside_labels, silhouette_lines, otsu, posterize).
+const ValueMath = (() => {
+  const INK = 140;
+  // grow (or shrink) a 0/1 picture by one pixel in every direction, n times
+  function morph(src, w, h, n, grow) {
+    let a = src, tmp = new Uint8Array(w * h);
+    const edge = grow ? 0 : 1;                                   // outside the picture counts as empty when growing, full when shrinking
+    for (let it = 0; it < n; it++) {
+      const b = new Uint8Array(w * h);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x, l = x > 0 ? a[i - 1] : edge, c = a[i], rr = x < w - 1 ? a[i + 1] : edge; tmp[i] = grow ? (l | c | rr) : (l & c & rr); }
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x, u = y > 0 ? tmp[i - w] : edge, c = tmp[i], d = y < h - 1 ? tmp[i + w] : edge; b[i] = grow ? (u | c | d) : (u & c & d); }
+      a = b;
+    }
+    return a === src ? src.slice() : a;
+  }
+  // thicken the ink so small gaps close, then number every patch of paper (0 = ink barrier)
+  function regions(gray, w, h, gap) {
+    const n = w * h, ink = new Uint8Array(n); for (let i = 0; i < n; i++) ink[i] = gray[i] < INK ? 1 : 0;
+    const barrier = gap > 0 ? morph(ink, w, h, gap, true) : ink.slice(), labels = new Int32Array(n), info = [null], stack = new Int32Array(n);
+    for (let s = 0; s < n; s++) {
+      if (barrier[s] || labels[s]) continue;
+      const id = info.length; let area = 0, L = 0, T = 0, R = 0, B = 0, sp = 0; stack[sp++] = s; labels[s] = id;
+      while (sp) {
+        const i = stack[--sp], x = i % w, y = (i - x) / w; area++;
+        if (x === 0) L = 1; if (y === 0) T = 1; if (x === w - 1) R = 1; if (y === h - 1) B = 1;
+        if (x > 0 && !barrier[i - 1] && !labels[i - 1]) { labels[i - 1] = id; stack[sp++] = i - 1; }
+        if (x < w - 1 && !barrier[i + 1] && !labels[i + 1]) { labels[i + 1] = id; stack[sp++] = i + 1; }
+        if (y > 0 && !barrier[i - w] && !labels[i - w]) { labels[i - w] = id; stack[sp++] = i - w; }
+        if (y < h - 1 && !barrier[i + w] && !labels[i + w]) { labels[i + w] = id; stack[sp++] = i + w; }
+      }
+      info.push({ area, sides: L + T + R + B });
+    }
+    return { ink, barrier, labels, info };
+  }
+  // which patches are background: see outside_labels in value.py
+  function outsideLabels(info, edge) {
+    const touching = []; for (let i = 1; i < info.length; i++) if (info[i].sides > 0) touching.push(i);
+    const out = new Set(), cut = []; if (!touching.length) return { out, cut };
+    let big = touching[0]; for (const i of touching) if (info[i].area > info[big].area) big = i;
+    for (const i of touching) { if (edge === 'open' || info[i].sides >= 2 || i === big) out.add(i); else cut.push(i); }
+    return { out, cut };
+  }
+  function labelAt(labels, w, h, x, y) {
+    x = Math.trunc(Math.min(Math.max(x, 0), w - 1)); y = Math.trunc(Math.min(Math.max(y, 0), h - 1));
+    if (labels[y * w + x]) return labels[y * w + x];
+    for (let q = 1; q <= 6; q++) for (let dy = -q; dy <= q; dy++) for (let dx = -q; dx <= q; dx++) { const X = x + dx, Y = y + dy; if (X >= 0 && X < w && Y >= 0 && Y < h && labels[Y * w + X]) return labels[Y * w + X]; }
+    return 0;
+  }
+  // line art -> figure mask (1 = black). fills / clears = [[x, y]] in this picture's pixels.
+  function silhouetteLines(gray, w, h, gap, fills, clears, edge) {
+    const R = regions(gray, w, h, gap), o = outsideLabels(R.info, edge || 'auto'), out = o.out, auto = new Set(out);
+    for (const p of clears || []) { const i = labelAt(R.labels, w, h, p[0], p[1]); if (i) out.add(i); }
+    for (const p of fills || []) { const i = labelAt(R.labels, w, h, p[0], p[1]); if (i) out.delete(i); }
+    const n = w * h; let fig = new Uint8Array(n);
+    for (let i = 0; i < n; i++) fig[i] = out.has(R.labels[i]) ? 0 : 1;            // the barrier (label 0) counts until shrunk back
+    if (gap > 0) fig = morph(fig, w, h, gap, false);
+    for (let i = 0; i < n; i++) if (R.ink[i]) fig[i] = 1;
+    return { mask: fig, patches: R.info.length - 1, cut_by_frame: o.cut.filter(i => !out.has(i)).length, labels: R.labels, out, auto };
+  }
+  // the gray that best splits a picture into a dark group and a light group
+  function otsu(gray) {
+    const hist = new Float64Array(256), n = gray.length; for (let i = 0; i < n; i++) hist[gray[i]]++;
+    let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+    let wB = 0, sumB = 0, best = -1, thr = 0;
+    for (let t = 0; t < 256; t++) { wB += hist[t]; if (!wB) continue; const wF = n - wB; if (!wF) break; sumB += t * hist[t]; const mB = sumB / wB, mF = (sum - sumB) / wF, v = wB * wF * (mB - mF) * (mB - mF); if (v > best) { best = v; thr = t; } }
+    return thr;
+  }
+  const posterize = (g, levels) => { if (!levels || levels < 2) return g; const k = levels - 1; return Math.floor(Math.round(g / 255 * k) / k * 255 + 0.5); };
+  return { INK, morph, regions, outsideLabels, labelAt, silhouetteLines, otsu, posterize };
+})();
+/*VAL-END*/
 </script>
 
 <script>
@@ -1009,6 +1246,316 @@ const Timing = (() => {
   window.addEventListener('resize', () => { if (active()) { T.ppf = 0; sync(); } });
   sync();
   return { T, loadFiles, loadAudio, setAudio, xsheet, gifBytes, play, stop, goFrame, goDrawing, travel: () => travel, starts, total, lengthFrames, curDrawing, sync };
+})();
+
+// ============================== CAMERA MODE ==============================
+const Camera = (() => {
+  const KCOL = ['#1e6eeb', '#e1323c', '#009650', '#eb7d00', '#823cc8', '#009696'];
+  const C = { W: 3840, H: 1920, margin: 0, keys: [{ frame: 1, x: 0, y: 0, zoom: 1, ease: 'inout' }, { frame: 25, x: 1200, y: 0, zoom: 1, ease: 'inout' }], sel: 1, cur: 1, playing: false };
+  const view = $('#cView'), ctx = view.getContext('2d'), prev = $('#cPrev');
+  const active = () => $('#mode-camera').classList.contains('on');
+  let P = null, tf = null, frozen = false, drag = null, timer = null;
+  const KEY = 'animtk-camera';
+
+  const plan = () => P = CamMath.plan(C.keys, C.W, C.H, C.margin / 100);
+  const rowAt = f => P.rows[AT.clamp(f - P.rows[0].frame, 0, P.rows.length - 1)];
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(moveJSON())); } catch (e) {} }
+  function moveJSON() { return { field: [C.W, C.H], margin: C.margin / 100, keys: C.keys.slice().sort((a, b) => a.frame - b.frame).map(k => ({ frame: k.frame, x: k.x, y: k.y, zoom: k.zoom, ease: k.ease })) }; }
+  function loadMove(j) {
+    if (!j || !Array.isArray(j.keys) || !j.keys.length) return false;
+    if (j.field) { C.W = +j.field[0] || 3840; C.H = +j.field[1] || 1920; }
+    C.margin = Math.round((+j.margin || 0) * 100);
+    C.keys = j.keys.map(k => ({ frame: Math.round(+k.frame), x: +k.x || 0, y: +k.y || 0, zoom: +k.zoom || 1, ease: k.ease || 'inout' }));
+    C.sel = 0; C.cur = C.keys[0].frame; frozen = false; return true;
+  }
+  function setKeys(keys) { loadMove({ field: [C.W, C.H], margin: C.margin / 100, keys }); sync(); }
+
+  // ---------- the picture: the world, with the canvas, every key's view and the path
+  function fitCanvas(c) { const dpr = window.devicePixelRatio || 1, r = c.parentElement.getBoundingClientRect(), w = Math.round(r.width * dpr), h = Math.round(r.height * dpr); if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } return dpr; }
+  function fitTo(w, h, pad) {                       // world -> pixels so the whole canvas shows
+    const zm = P.zoom_max, ww = P.canvas[0] / zm, wh = P.canvas[1] / zm, s = Math.min((w - 2 * pad) / ww, (h - 2 * pad) / wh);
+    return { s, ox: (w - ww * s) / 2 - P.origin[0] * s, oy: (h - wh * s) / 2 - P.origin[1] * s };
+  }
+  const viewRect = k => ({ x: k.x - C.W / (2 * k.zoom), y: k.y - C.H / (2 * k.zoom), w: C.W / k.zoom, h: C.H / k.zoom });
+  function paintWorld(g, t, images) {               // the key drawings, each inside its own view
+    if (!images) return;
+    g.save(); g.globalCompositeOperation = 'multiply';
+    for (const k of C.keys) if (k.img) { const r = viewRect(k); g.globalAlpha = 0.75; g.drawImage(k.img, t.ox + r.x * t.s, t.oy + r.y * t.s, r.w * t.s, r.h * t.s); }
+    g.restore();
+  }
+  function paintPlan(g, w, h, t, px, title) {
+    const zm = P.zoom_max, X = v => t.ox + v * t.s, Y = v => t.oy + v * t.s, ox = P.origin[0], oy = P.origin[1], ww = P.canvas[0] / zm, wh = P.canvas[1] / zm;
+    g.fillStyle = '#fff'; g.fillRect(X(ox), Y(oy), ww * t.s, wh * t.s);
+    g.strokeStyle = 'rgba(0,0,0,.07)'; g.lineWidth = px;                      // faint grid every half field so distances can be judged
+    for (let v = Math.ceil(ox / (C.W / 2)) * (C.W / 2); v < ox + ww; v += C.W / 2) { g.beginPath(); g.moveTo(X(v), Y(oy)); g.lineTo(X(v), Y(oy + wh)); g.stroke(); }
+    for (let v = Math.ceil(oy / (C.H / 2)) * (C.H / 2); v < oy + wh; v += C.H / 2) { g.beginPath(); g.moveTo(X(ox), Y(v)); g.lineTo(X(ox + ww), Y(v)); g.stroke(); }
+    paintWorld(g, t, true);
+    g.strokeStyle = '#3c3c46'; g.lineWidth = 2 * px; g.strokeRect(X(ox), Y(oy), ww * t.s, wh * t.s);
+    g.strokeStyle = '#6e6e78'; g.lineWidth = 1.5 * px; g.beginPath(); P.rows.forEach((r, i) => { const x = X(r.x), y = Y(r.y); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+    g.fillStyle = '#6e6e78'; for (const r of P.rows) { g.beginPath(); g.arc(X(r.x), Y(r.y), 2.2 * px, 0, 7); g.fill(); }
+    C.keys.forEach((k, i) => {
+      const r = viewRect(k), col = KCOL[i % KCOL.length], on = i === C.sel;
+      g.strokeStyle = col; g.lineWidth = (on ? 4 : 2.5) * px; g.strokeRect(X(r.x), Y(r.y), r.w * t.s, r.h * t.s);
+      g.fillStyle = col; g.beginPath(); g.arc(X(k.x), Y(k.y), (on ? 7 : 5) * px, 0, 7); g.fill();
+      const lbl = 'frame ' + k.frame + '   ' + Math.round(k.zoom * 100) + '%'; g.font = '700 ' + 12 * px + 'px system-ui'; const tw = g.measureText(lbl).width;
+      const ly = Y(r.y) + (4 + (i % 2) * 20) * px; g.fillRect(X(r.x) + 4 * px, ly, tw + 10 * px, 18 * px); g.fillStyle = '#fff'; g.textBaseline = 'middle'; g.fillText(lbl, X(r.x) + 9 * px, ly + 9.5 * px);
+    });
+    if (!title) {                                    // where the camera is on the frame being scrubbed
+      const q = rowAt(C.cur), r = viewRect(q); g.setLineDash([8 * px, 6 * px]); g.strokeStyle = '#ff5c9a'; g.lineWidth = 2 * px; g.strokeRect(X(r.x), Y(r.y), r.w * t.s, r.h * t.s); g.setLineDash([]);
+    }
+    g.fillStyle = title ? '#1e1e24' : '#a6a1b4'; g.font = (title ? '700 ' : '') + 13 * px + 'px system-ui'; g.textBaseline = 'alphabetic'; g.textAlign = 'center';
+    g.fillText(P.canvas[0] + ' px', X(ox + ww / 2), Y(oy) - 7 * px);
+    g.save(); g.translate(X(ox) - 8 * px, Y(oy + wh / 2)); g.rotate(-Math.PI / 2); g.fillText(P.canvas[1] + ' px', 0, 0); g.restore(); g.textAlign = 'left';
+  }
+  function draw() {
+    const dpr = fitCanvas(view); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#0e0d11'; ctx.fillRect(0, 0, view.width, view.height);
+    if (!frozen || !tf) tf = fitTo(view.width, view.height, 46 * dpr);
+    paintPlan(ctx, view.width, view.height, tf, dpr, false);
+  }
+  function drawPrev() {                             // what the audience sees on this frame
+    const g = prev.getContext('2d'), w = prev.width, h = Math.round(w * C.H / C.W); if (prev.height !== h) prev.height = h;
+    const q = rowAt(C.cur), s = w / (C.W / q.zoom), t = { s, ox: w / 2 - q.x * s, oy: h / 2 - q.y * s };
+    g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(0,0,0,.16)'; g.lineWidth = 1; const step = C.W / 8, x0 = q.x - C.W / q.zoom / 2, y0 = q.y - C.H / q.zoom / 2;
+    for (let v = Math.ceil(x0 / step) * step; v < x0 + C.W / q.zoom; v += step) { g.beginPath(); g.moveTo(t.ox + v * s, 0); g.lineTo(t.ox + v * s, h); g.stroke(); }
+    for (let v = Math.ceil(y0 / step) * step; v < y0 + C.H / q.zoom; v += step) { g.beginPath(); g.moveTo(0, t.oy + v * s); g.lineTo(w, t.oy + v * s); g.stroke(); }
+    paintWorld(g, t, true);
+    C.keys.forEach((k, i) => { const r = viewRect(k); g.strokeStyle = KCOL[i % KCOL.length]; g.globalAlpha = 0.55; g.lineWidth = 2; g.strokeRect(t.ox + r.x * s, t.oy + r.y * s, r.w * s, r.h * s); g.globalAlpha = 1; });
+  }
+
+  // ---------- the table and the read-outs
+  const HEAD = [['frame', 'frame'], ['x', 'cam x'], ['y', 'cam y'], ['zoom', 'zoom %'], ['canvas_cx', 'center on canvas x'], ['canvas_cy', 'y'], ['view_w', 'sees w'], ['view_h', 'h'], ['layer_scale', 'canvas layer scale %'], ['layer_x', 'layer x'], ['layer_y', 'layer y'], ['place_x', 'place drawing at x'], ['place_y', 'y'], ['place_scale', 'drawing scale %']];
+  function fillTable() {
+    const keyf = new Set(C.keys.map(k => k.frame)), fmt = (c, v) => c === 'zoom' ? (v * 100).toFixed(1) : c === 'frame' ? v : (c === 'layer_scale' || c === 'place_scale') ? v.toFixed(2) : Math.round(v);
+    $('#cTable').innerHTML = '<thead><tr>' + HEAD.map(h => '<th>' + h[1] + '</th>').join('') + '</tr></thead><tbody>' +
+      P.rows.map(r => '<tr data-f="' + r.frame + '"' + (keyf.has(r.frame) ? ' class="key"' : '') + '>' + HEAD.map(h => '<td>' + fmt(h[0], r[h[0]]) + '</td>').join('') + '</tr>').join('') + '</tbody>';
+  }
+  function markRow(scroll) {
+    $$('#cTable tr.now').forEach(t => t.classList.remove('now')); const tr = $('#cTable tr[data-f="' + C.cur + '"]');
+    if (tr) { tr.classList.add('now'); if (scroll) { const wrap = $('#cTableWrap'), top = tr.offsetTop - 28; if (top < wrap.scrollTop || top > wrap.scrollTop + wrap.clientHeight - 60) wrap.scrollTop = Math.max(0, top - wrap.clientHeight / 2); } }
+  }
+  function readouts() {
+    const over = CamMath.check(P), q = rowAt(C.cur), n = P.rows.length;
+    $('#cSize').textContent = P.canvas[0] + ' x ' + P.canvas[1] + ' px';
+    $('#cSizeInfo').textContent = 'Field ' + C.W + ' x ' + C.H + ', tightest zoom ' + Math.round(P.zoom_max * 100) + '%, ' + n + ' frame' + (n === 1 ? '' : 's') + (C.margin ? ', ' + C.margin + '% spare room' : '') + '. ' +
+      (over < 0.6 ? 'The view stays inside the canvas on every frame.' : 'RUNS OFF the canvas by ' + over.toFixed(1) + ' px.') + ' Draw the background this size and the tightest zoom still has a full pixel per pixel.';
+    $('#cNow').textContent = 'Frame ' + q.frame + ', zoom ' + (q.zoom * 100).toFixed(1) + '%\nCamera center on the canvas: ' + Math.round(q.canvas_cx) + ', ' + Math.round(q.canvas_cy) + '\nIt sees ' + Math.round(q.view_w) + ' x ' + Math.round(q.view_h) + ' px of the canvas\n\nIn a ' + C.W + ' x ' + C.H + ' comp:\ncanvas layer scale ' + q.layer_scale.toFixed(2) + '%\nlayer center at ' + Math.round(q.layer_x) + ', ' + Math.round(q.layer_y) +
+      '\n\nA drawing made for this frame goes on the canvas with its top-left corner at ' + Math.round(q.place_x) + ', ' + Math.round(q.place_y) + ', scaled ' + q.place_scale.toFixed(2) + '%';
+    $('#cFrameLbl').textContent = 'frame ' + C.cur + ' of ' + P.rows[0].frame + ' to ' + P.rows[n - 1].frame;
+  }
+  function keyList() {
+    $('#cKeys').innerHTML = ''; const order = C.keys.map((k, i) => i).sort((a, b) => C.keys[a].frame - C.keys[b].frame);
+    for (const i of order) { const k = C.keys[i], d = document.createElement('div'); d.className = 'pitem' + (i === C.sel ? ' on' : '');
+      d.innerHTML = '<i class="dot" style="background:' + KCOL[i % KCOL.length] + '"></i><span>frame ' + k.frame + ' &nbsp; (' + Math.round(k.x) + ', ' + Math.round(k.y) + ') &nbsp; ' + Math.round(k.zoom * 100) + '%' + (k.img ? ' &nbsp; +drawing' : '') + '</span>';
+      d.onclick = () => { C.sel = i; C.cur = k.frame; sync(); }; $('#cKeys').appendChild(d); }
+    const k = C.keys[C.sel], set = (id, v) => { const el = $(id); if (document.activeElement !== el) el.value = v; };
+    set('#cKF', k.frame); set('#cKX', Math.round(k.x)); set('#cKY', Math.round(k.y)); set('#cKZ', +(k.zoom * 100).toFixed(1)); $('#cKE').value = k.ease || 'inout';
+  }
+  function sync(light) {
+    plan(); C.cur = AT.clamp(C.cur, P.rows[0].frame, P.rows[P.rows.length - 1].frame);
+    const sc = $('#cScrub'); sc.min = P.rows[0].frame; sc.max = P.rows[P.rows.length - 1].frame; sc.value = C.cur;
+    $('#cMargin').value = C.margin; $('#cMargin').nextElementSibling.textContent = C.margin + '%';
+    if (document.activeElement !== $('#cW')) $('#cW').value = C.W; if (document.activeElement !== $('#cH')) $('#cH').value = C.H;
+    if (!light) { keyList(); fillTable(); save(); }
+    markRow(!light || C.playing); readouts(); if (active()) { draw(); drawPrev(); }
+  }
+
+  // ---------- exports
+  function csv() { return [CamMath.COLS.join(',')].concat(P.rows.map(r => CamMath.COLS.map(c => r[c]).join(','))).join('\r\n') + '\r\n'; }
+  function planCanvas(width) {
+    const zm = P.zoom_max, ww = P.canvas[0] / zm, wh = P.canvas[1] / zm, px = width / 1300, pad = 60 * px, top = 96 * px, s = (width - 2 * pad) / ww;
+    const c = document.createElement('canvas'); c.width = width; c.height = Math.round(wh * s + top + pad); const g = c.getContext('2d');
+    g.fillStyle = '#f5f4f7'; g.fillRect(0, 0, c.width, c.height);
+    paintPlan(g, c.width, c.height, { s, ox: pad - P.origin[0] * s, oy: top - P.origin[1] * s }, px, true);
+    g.fillStyle = '#1e1e24'; g.font = '700 ' + 22 * px + 'px system-ui'; g.fillText('Canvas needed: ' + P.canvas[0] + ' x ' + P.canvas[1] + ' px', pad, 34 * px);
+    g.fillStyle = '#5a5a64'; g.font = 13 * px + 'px system-ui'; g.fillText('field ' + C.W + ' x ' + C.H + ', tightest zoom ' + Math.round(zm * 100) + '%, ' + P.rows.length + ' frames. Boxes = what the camera sees at each key. Dots = its center, one per frame.', pad, 58 * px);
+    return c;
+  }
+  $('#cCsv').onclick = () => { download(new Blob([csv()], { type: 'text/csv' }), 'shot_camera.csv'); $('#cExportInfo').textContent = 'Table saved: ' + P.rows.length + ' frames.'; };
+  $('#cPng').onclick = () => planCanvas(2600).toBlob(b => download(b, 'shot_plan.png'));
+  $('#cSave').onclick = () => download(new Blob([JSON.stringify(moveJSON(), null, 1)], { type: 'application/json' }), 'shot_move.json');
+  $('#cLoadBtn').onclick = () => $('#cLoad').click();
+  $('#cLoad').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return; try { if (loadMove(JSON.parse(await f.text()))) { sync(); $('#cExportInfo').textContent = 'Opened ' + f.name; } else $('#cExportInfo').textContent = 'That file has no camera keys in it.'; } catch (err) { $('#cExportInfo').textContent = 'Could not read that file.'; } };
+
+  // ---------- controls
+  const selKey = () => C.keys[C.sel];
+  $('#cW').oninput = e => { const v = Math.round(+e.target.value); if (v >= 16) { C.W = v; sync(); } }; $('#cH').oninput = e => { const v = Math.round(+e.target.value); if (v >= 16) { C.H = v; sync(); } };
+  $('#cMargin').oninput = e => { C.margin = +e.target.value; sync(); };
+  $('#cKF').oninput = e => { const v = Math.round(+e.target.value); if (v >= 1 && !C.keys.some((k, i) => i !== C.sel && k.frame === v)) { selKey().frame = v; C.cur = v; sync(); } };
+  $('#cKX').oninput = e => { if (e.target.value !== '') { selKey().x = +e.target.value; sync(); } }; $('#cKY').oninput = e => { if (e.target.value !== '') { selKey().y = +e.target.value; sync(); } };
+  $('#cKZ').oninput = e => { const v = +e.target.value; if (v >= 10 && v <= 800) { selKey().zoom = v / 100; sync(); } };
+  $('#cKE').onchange = e => { selKey().ease = e.target.value; sync(); };
+  function addKey() {
+    const last = C.keys.slice().sort((a, b) => a.frame - b.frame).pop();
+    C.keys.push({ frame: last.frame + 24, x: last.x + Math.round(C.W / 4), y: last.y, zoom: last.zoom, ease: 'inout' }); C.sel = C.keys.length - 1; C.cur = last.frame + 24; sync();
+  }
+  $('#cAdd').onclick = addKey;
+  $('#cDel').onclick = () => { if (C.keys.length < 2) return; C.keys.splice(C.sel, 1); C.sel = Math.max(0, C.sel - 1); sync(); };
+  $$('[data-cmove]').forEach(b => b.onclick = () => { const m = b.dataset.cmove;
+    setKeys([{ frame: 1, x: 0, y: 0, zoom: 1, ease: 'inout' }, { frame: 49, x: m === 'push' ? 0 : Math.round(C.W / 2), y: 0, zoom: m === 'pan' ? 1 : 1.5, ease: 'inout' }]); C.sel = 1; sync(); });
+  $('#cImgBtn').onclick = () => $('#cImg').click();
+  async function setImage(i, file) { const bmp = await createImageBitmap(file), k = Math.min(1, 1600 / bmp.width), c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height); C.keys[i].img = c; sync(); }
+  $('#cImg').onchange = e => { if (e.target.files[0]) setImage(C.sel, e.target.files[0]); e.target.value = ''; };
+  $('#cImgClear').onclick = () => { delete selKey().img; sync(); };
+  $('#cScrub').oninput = e => { C.cur = +e.target.value; sync(true); };
+  $('#cTable').onclick = e => { const tr = e.target.closest('tr[data-f]'); if (tr) { C.cur = +tr.dataset.f; sync(true); } };
+  function stop() { C.playing = false; clearInterval(timer); $('#cPlay').textContent = 'Play'; }
+  function play() { if (P.rows.length < 2) return; C.playing = true; $('#cPlay').textContent = 'Stop'; if (C.cur >= P.rows[P.rows.length - 1].frame) C.cur = P.rows[0].frame;
+    timer = setInterval(() => { if (C.cur >= P.rows[P.rows.length - 1].frame) { stop(); return; } C.cur++; sync(true); }, 1000 / 24); }
+  $('#cPlay').onclick = () => C.playing ? stop() : play();
+
+  const pos = e => { const r = view.getBoundingClientRect(), dpr = view.width / r.width; return [(e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr, dpr]; };
+  function hit(mx, my, dpr) {                         // a key's center dot first, then the smallest box under the pointer
+    let best = -1, bd = 14 * dpr;
+    C.keys.forEach((k, i) => { const d = Math.hypot(tf.ox + k.x * tf.s - mx, tf.oy + k.y * tf.s - my); if (d < bd) { bd = d; best = i; } });
+    if (best >= 0) return best; let area = Infinity;
+    C.keys.forEach((k, i) => { const r = viewRect(k), x = tf.ox + r.x * tf.s, y = tf.oy + r.y * tf.s; if (mx >= x && mx <= x + r.w * tf.s && my >= y && my <= y + r.h * tf.s && (r.w * r.h < area || i === C.sel)) { if (i === C.sel) area = -1; else area = r.w * r.h; best = i; } });
+    return best;
+  }
+  view.addEventListener('pointerdown', e => { const [mx, my, dpr] = pos(e), i = hit(mx, my, dpr); if (i < 0) return; view.setPointerCapture(e.pointerId); C.sel = i; C.cur = C.keys[i].frame; frozen = true; drag = { mx, my, x: C.keys[i].x, y: C.keys[i].y }; sync(); });
+  view.addEventListener('pointermove', e => { if (!drag) return; const [mx, my] = pos(e), k = selKey(); let dx = (mx - drag.mx) / tf.s, dy = (my - drag.my) / tf.s; if (e.shiftKey) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; } k.x = Math.round(drag.x + dx); k.y = Math.round(drag.y + dy); sync(); });
+  const drop = () => { if (drag) { drag = null; frozen = false; sync(); } };
+  view.addEventListener('pointerup', drop); view.addEventListener('pointercancel', drop);
+  view.addEventListener('wheel', e => { e.preventDefault(); const k = selKey(); k.zoom = AT.clamp(Math.round(k.zoom * Math.exp(-e.deltaY * 0.0012) * 100) / 100, 0.1, 8); sync(); }, { passive: false });
+  window.addEventListener('keydown', e => {
+    if (!active() || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return; const k = selKey(), step = e.shiftKey ? 100 : 10;
+    if (e.key === 'ArrowLeft') k.x -= step; else if (e.key === 'ArrowRight') k.x += step; else if (e.key === 'ArrowUp') k.y -= step; else if (e.key === 'ArrowDown') k.y += step;
+    else if (e.code === 'Space') { e.preventDefault(); C.playing ? stop() : play(); return; } else return;
+    e.preventDefault(); sync();
+  });
+  window.addEventListener('resize', () => { if (active()) { draw(); drawPrev(); } });
+  try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); if (j) loadMove(j); } catch (e) {}
+  sync();
+  return { C, plan: () => P, setKeys, loadMove, moveJSON, csv, planCanvas, sync, setImage, transform: () => tf, play, stop };
+})();
+
+// ============================== VALUE MODE ==============================
+const Value = (() => {
+  const WORK = 960;
+  const Vs = { frames: [], cur: 0, mode: 'auto', gap: 4, thr: 128, thrAuto: true, edge: true, levels: 0, stack: false, flip: false, orig: false };
+  const view = $('#vView'), ctx = view.getContext('2d');
+  const active = () => $('#mode-value').classList.contains('on');
+  let R = null, boxes = null;                       // R = the worked-out silhouette of the current frame
+
+  const natural = s => (s.match(/\d+/g) || ['0']).map(Number);
+  const cmpName = (a, b) => { const x = natural(a.name), y = natural(b.name); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return a.name.localeCompare(b.name); };
+  async function loadFiles(list) {
+    const files = [...list].filter(f => /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)).sort(cmpName); if (!files.length) return;
+    Vs.frames = []; Vs.cur = 0; $('#vInfo').textContent = 'Loading...';
+    for (const f of files) {
+      const bmp = await createImageBitmap(f), k = Math.min(1, 1600 / bmp.width), c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);                       // kept with its transparency
+      Vs.frames.push({ name: f.name, file: f, img: c, w: bmp.width, h: bmp.height, marks: [] }); bmp.close && bmp.close();
+    }
+    sync();
+  }
+  // gray + alpha of a picture at a given width (transparent parts read as white paper)
+  function pixels(src, w, h) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d', { willReadFrequently: true }); g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, w, h);
+    const d = g.getImageData(0, 0, w, h).data, n = w * h, gray = new Uint8Array(n), alpha = new Uint8Array(n);
+    for (let i = 0, p = 0; i < n; i++, p += 4) { const a = d[p + 3] / 255; alpha[i] = d[p + 3]; gray[i] = Math.min(255, Math.floor((d[p] * 0.299 + d[p + 1] * 0.587 + d[p + 2] * 0.114) * a + 255 * (1 - a) + 0.5)); }
+    return { gray, alpha };
+  }
+  function pickMode(gray, alpha, w, h) {
+    let clear = 0; const n = w * h; for (let i = 0; i < n; i++) if (alpha[i] < 128) clear++;
+    if (clear / n > 0.02 && clear / n < 0.995) return 'alpha';
+    const dark = new Uint8Array(n); for (let i = 0; i < n; i++) dark[i] = gray[i] < 200 ? 1 : 0;
+    const solid = ValueMath.morph(dark, w, h, 7, false); let s = 0; for (let i = 0; i < n; i++) s += solid[i];
+    return s / n > 0.03 ? 'tone' : 'lines';
+  }
+  function work(fr, extra) {
+    const w = Math.min(WORK, fr.w), h = Math.max(1, Math.round(fr.h * w / fr.w)), px = pixels(fr.img, w, h), n = w * h;
+    const mode = Vs.mode === 'auto' ? pickMode(px.gray, px.alpha, w, h) : Vs.mode, out = { w, h, mode, gray: px.gray };
+    if (mode === 'alpha') { out.mask = new Uint8Array(n); for (let i = 0; i < n; i++) out.mask[i] = px.alpha[i] >= 128 ? 1 : 0; }
+    else if (mode === 'tone') { out.thr = Vs.thrAuto ? ValueMath.otsu(px.gray) + 1 : Vs.thr; out.mask = new Uint8Array(n); for (let i = 0; i < n; i++) out.mask[i] = px.gray[i] < out.thr ? 1 : 0; }
+    else {
+      const marks = fr.marks.concat(extra || []), pt = m => [m.x * w, m.y * h];
+      Object.assign(out, ValueMath.silhouetteLines(px.gray, w, h, Vs.gap, marks.filter(m => m.set === 'fill').map(pt), marks.filter(m => m.set === 'clear').map(pt), Vs.edge ? 'auto' : 'open'));
+    }
+    let cov = 0, fs = 0, bs = 0; for (let i = 0; i < n; i++) { if (out.mask[i]) { cov++; fs += px.gray[i]; } else bs += px.gray[i]; }
+    out.coverage = cov / n * 100;
+    if (mode !== 'lines' && cov && cov < n) { out.figure = fs / cov / 2.55; out.background = bs / (n - cov) / 2.55; out.separation = Math.abs(out.figure - out.background); }
+    return out;
+  }
+  function maskCanvas(r, W, H) {                    // crisp black on white at any size
+    const s = document.createElement('canvas'); s.width = r.w; s.height = r.h; const g = s.getContext('2d'), im = g.createImageData(r.w, r.h);
+    for (let i = 0, p = 0; i < r.mask.length; i++, p += 4) { const v = r.mask[i] ? 0 : 255; im.data[p] = im.data[p + 1] = im.data[p + 2] = v; im.data[p + 3] = 255; }
+    g.putImageData(im, 0, 0); if (!W || (W === r.w && H === r.h)) return s;
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const cg = c.getContext('2d', { willReadFrequently: true }); cg.imageSmoothingQuality = 'high'; cg.drawImage(s, 0, 0, W, H);
+    const d = cg.getImageData(0, 0, W, H); for (let p = 0; p < d.data.length; p += 4) { const v = d.data[p] < 128 ? 0 : 255; d.data[p] = d.data[p + 1] = d.data[p + 2] = v; } cg.putImageData(d, 0, 0); return c;
+  }
+  function grayCanvas(src, W, H) {
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.imageSmoothingQuality = 'high'; g.drawImage(src, 0, 0, W, H);
+    const d = g.getImageData(0, 0, W, H);
+    for (let p = 0; p < d.data.length; p += 4) { const v = ValueMath.posterize(Math.min(255, Math.floor(d.data[p] * 0.299 + d.data[p + 1] * 0.587 + d.data[p + 2] * 0.114 + 0.5)), Vs.levels); d.data[p] = d.data[p + 1] = d.data[p + 2] = v; }
+    g.putImageData(d, 0, 0); return c;
+  }
+  function flat(src, W, H) { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.drawImage(src, 0, 0, W, H); return c; }
+
+  function draw() {
+    const dpr = window.devicePixelRatio || 1, rc = view.parentElement.getBoundingClientRect(); view.width = Math.round(rc.width * dpr); view.height = Math.round(rc.height * dpr);
+    ctx.fillStyle = '#0e0d11'; ctx.fillRect(0, 0, view.width, view.height); const fr = Vs.frames[Vs.cur]; boxes = null;
+    if (!fr) { ctx.fillStyle = '#a6a1b4'; ctx.font = 16 * dpr + 'px system-ui'; ctx.textAlign = 'center'; ctx.fillText('Load a frame to see its silhouette and its grayscale', view.width / 2, view.height / 2); ctx.textAlign = 'left'; $('#vReadout').textContent = ''; return; }
+    const gap = 12 * dpr, pad = 16 * dpr, ar = fr.w / fr.h, W = view.width - 2 * pad, H = view.height - 2 * pad;
+    let pw, ph, b; if (Vs.stack) { ph = Math.min((H - gap) / 2, W / ar); pw = ph * ar; const x = (view.width - pw) / 2, y = (view.height - 2 * ph - gap) / 2; b = [[x, y], [x, y + ph + gap]]; }
+    else { pw = Math.min((W - gap) / 2, H * ar); ph = pw / ar; const x = (view.width - 2 * pw - gap) / 2, y = (view.height - ph) / 2; b = [[x, y], [x + pw + gap, y]]; }
+    boxes = { pw, ph, sil: b[0], other: b[1] };
+    const put = (c, at) => { ctx.save(); if (Vs.flip) { ctx.translate(at[0] + pw, at[1]); ctx.scale(-1, 1); } else ctx.translate(at[0], at[1]); ctx.drawImage(c, 0, 0, pw, ph); ctx.restore(); };
+    ctx.imageSmoothingQuality = 'high'; put(maskCanvas(R), b[0]); put(Vs.orig ? flat(fr.img, fr.img.width, fr.img.height) : grayCanvas(fr.img, fr.img.width, fr.img.height), b[1]);
+    ctx.font = '700 ' + 11 * dpr + 'px system-ui'; ctx.textBaseline = 'top'; [['SILHOUETTE', b[0]], [Vs.orig ? 'ORIGINAL' : 'GRAYSCALE' + (Vs.levels ? ', ' + Vs.levels + ' values' : ''), b[1]]].forEach(([t, at]) => { const tw = ctx.measureText(t).width; ctx.fillStyle = 'rgba(22,21,26,.82)'; ctx.fillRect(at[0] + 6 * dpr, at[1] + 6 * dpr, tw + 12 * dpr, 19 * dpr); ctx.fillStyle = '#ff8fb8'; ctx.fillText(t, at[0] + 12 * dpr, at[1] + 10 * dpr); });
+    const kind = { alpha: 'transparent background', tone: 'painted or toned, darker than ' + R.thr, lines: 'line art, ' + R.patches + ' patches of paper' }[R.mode];
+    let t = fr.name + '   (' + (Vs.cur + 1) + ' of ' + Vs.frames.length + ')\n' + kind + '\nblack covers ' + R.coverage.toFixed(1) + '% of the frame';
+    if (R.separation != null) t += '\nfigure ' + R.figure.toFixed(0) + ', background ' + R.background.toFixed(0) + ' (0 black, 100 white)\napart by ' + R.separation.toFixed(0) + ': ' + (R.separation >= 30 ? 'reads clearly' : R.separation < 15 ? 'close in value, look here' : 'separates, but not by much');
+    if (R.mode === 'lines' && R.cut_by_frame) t += '\n' + R.cut_by_frame + ' patch' + (R.cut_by_frame === 1 ? '' : 'es') + ' on the frame edge filled as cut off bodies';
+    if (fr.marks.length) t += '\nyour clicks, for value_check.py:\n' + fr.marks.map(m => '--' + m.set + ' ' + Math.round(m.x * fr.w) + ',' + Math.round(m.y * fr.h)).join(' ');
+    $('#vReadout').textContent = t;
+  }
+  function sync() {
+    const fr = Vs.frames[Vs.cur]; R = fr ? work(fr) : null;
+    const m = R ? R.mode : Vs.mode; $('#vGapRow').style.display = $('#vEdgeRow').style.display = (m === 'lines' || m === 'auto') ? '' : 'none'; $('#vThrRow').style.display = $('#vThrAutoRow').style.display = m === 'tone' ? '' : 'none';
+    $('#vGap').nextElementSibling.textContent = Vs.gap; if (R && R.mode === 'tone' && Vs.thrAuto) { Vs.thr = R.thr; $('#vThr').value = R.thr; } $('#vThr').nextElementSibling.textContent = Vs.thr;
+    $('#vInfo').textContent = fr ? Vs.frames.length + ' frame' + (Vs.frames.length === 1 ? '' : 's') + ', ' + fr.w + ' x ' + fr.h : 'Pick one frame or several. Arrow keys step through them.';
+    if (active()) draw();
+  }
+  // a click on the silhouette flips the patch of paper under it
+  function click(nx, ny) {
+    const fr = Vs.frames[Vs.cur]; if (!fr || !R || R.mode !== 'lines') return false;
+    const L = ValueMath.labelAt(R.labels, R.w, R.h, nx * R.w, ny * R.h); if (!L) return false;
+    const wasOut = R.out.has(L); fr.marks = fr.marks.filter(m => ValueMath.labelAt(R.labels, R.w, R.h, m.x * R.w, m.y * R.h) !== L);
+    if (R.auto.has(L) === wasOut) fr.marks.push({ x: nx, y: ny, set: wasOut ? 'fill' : 'clear' });      // only remember it when it differs from the automatic answer
+    sync(); return true;
+  }
+  view.addEventListener('pointerdown', e => { if (!boxes) return; const r = view.getBoundingClientRect(), k = view.width / r.width, mx = (e.clientX - r.left) * k, my = (e.clientY - r.top) * k;
+    for (const at of [boxes.sil, boxes.other]) { let nx = (mx - at[0]) / boxes.pw, ny = (my - at[1]) / boxes.ph; if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1) { if (Vs.flip) nx = 1 - nx; click(nx, ny); return; } } });
+
+  // ---------- exports (worked out again from the file at full size)
+  async function exportCanvas(only) {
+    const fr = Vs.frames[Vs.cur]; if (!fr) return null; const bmp = await createImageBitmap(fr.file), W = bmp.width, H = bmp.height, sil = maskCanvas(R, W, H);
+    if (only) return sil; const g2 = grayCanvas(bmp, W, H), gapx = Math.max(8, Math.floor(W / 200)), c = document.createElement('canvas'); c.width = W * 2 + gapx; c.height = H;
+    const g = c.getContext('2d'); g.fillStyle = '#ff78aa'; g.fillRect(0, 0, c.width, H); g.drawImage(sil, 0, 0); g.drawImage(g2, W + gapx, 0); return c;
+  }
+  const stem = () => Vs.frames[Vs.cur].name.replace(/\.[^.]+$/, '');
+  $('#vPng').onclick = async () => { const c = await exportCanvas(false); if (c) c.toBlob(b => { download(b, stem() + '_value.png'); $('#vExportInfo').textContent = 'Saved ' + c.width + ' x ' + c.height + ' px.'; }); };
+  $('#vSil').onclick = async () => { const c = await exportCanvas(true); if (c) c.toBlob(b => { download(b, stem() + '_silhouette.png'); $('#vExportInfo').textContent = 'Saved ' + c.width + ' x ' + c.height + ' px.'; }); };
+
+  // ---------- controls
+  const go = d => { if (Vs.frames.length) { Vs.cur = AT.clamp(Vs.cur + d, 0, Vs.frames.length - 1); sync(); } };
+  $('#vLoadBtn').onclick = () => $('#vFiles').click(); $('#vFiles').onchange = e => { loadFiles(e.target.files); e.target.value = ''; };
+  $('#vStage').addEventListener('dragover', e => e.preventDefault()); $('#vStage').addEventListener('drop', e => { e.preventDefault(); loadFiles(e.dataTransfer.files); });
+  $('#vPrev').onclick = () => go(-1); $('#vNext').onclick = () => go(1);
+  $('#vMode').onchange = e => { Vs.mode = e.target.value; sync(); };
+  $('#vGap').oninput = e => { Vs.gap = +e.target.value; sync(); };
+  $('#vThr').oninput = e => { Vs.thr = +e.target.value; Vs.thrAuto = false; $('#vThrAuto').checked = false; sync(); };
+  $('#vThrAuto').onchange = e => { Vs.thrAuto = e.target.checked; sync(); };
+  $('#vEdge').onchange = e => { Vs.edge = e.target.checked; sync(); };
+  $('#vReset').onclick = () => { const fr = Vs.frames[Vs.cur]; if (fr) { fr.marks = []; sync(); } };
+  $('#vLevels').onchange = e => { Vs.levels = +e.target.value; sync(); };
+  $('#vStack').onchange = e => { Vs.stack = e.target.checked; sync(); }; $('#vFlip').onchange = e => { Vs.flip = e.target.checked; sync(); }; $('#vOrig').onchange = e => { Vs.orig = e.target.checked; sync(); };
+  window.addEventListener('keydown', e => { if (!active() || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return; if (e.key === 'ArrowRight') { e.preventDefault(); go(1); } else if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); } else if (e.key === 'f' || e.key === 'F') { Vs.flip = !Vs.flip; $('#vFlip').checked = Vs.flip; sync(); } });
+  window.addEventListener('resize', () => { if (active()) draw(); });
+  sync();
+  return { Vs, loadFiles, work, result: () => R, click, sync, exportCanvas, boxes: () => boxes };
 })();
 </script>
 </body>
