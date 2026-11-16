@@ -42,6 +42,7 @@ The app needs nothing installed: open `animation_app.html` in Chrome or Edge. It
 | "Does this pose read?" / silhouette / values | `value_check.py`, or Value mode in the app |
 | "Check the proportions / balance / this hand / this cat" | `anatomy_guide.py` |
 | "Which mouth goes on which frame?" | `lip_sync.py` |
+| "Show me how a body bends / let me pose a figure and time it" | Body mode in the app |
 | "Mark shot 12 as cleaned up" | `tracker_update.py` |
 
 Every script prints a short plain summary and the list of files it saved. Run any script with `-h`, or read the
@@ -51,7 +52,7 @@ comment at the top of the file, for every option.
 
 ## The app: `animation_app.html`
 
-One self-contained file, four tabs. Load files with the buttons or by dragging them onto the picture.
+One self-contained file, five tabs. Load files with the buttons or by dragging them onto the picture.
 
 **Perspective.** Load a board. Drag lines along edges that go back in space: two or more lines per direction give a
 vanishing point, and two vanishing points give the horizon and the lens. Sliders: Dutch tilt, fisheye, lens width,
@@ -75,6 +76,27 @@ A key can carry its drawing so keys can be lined up by eye. Exports the table as
 **Value.** Load frames. Shows a pure black silhouette beside the grayscale. Line art: closes small gaps and fills the
 figure; click any patch to flip it between black and white. Painted frames: darker than a cutoff. Transparent
 backgrounds: used directly. Grayscale can be squashed to 2 to 5 values. Flip, stack, and full-size PNG export.
+
+**Body.** A posable side-view mannequin for body mechanics (being built in phases; phase 1 is in: the mannequin, its
+timeline, onion skin and the timing slider). Joints: neck, spine, hips, and both shoulders, elbows, wrists, knees and
+ankles. Drag a body part to swing it from its joint, drag a wrist or ankle dot to pull the whole limb, drag the hip
+diamond to move the body (the feet stay planted). Click a dot to pick a joint and bend it with the slider. The timeline
+holds key poses (pink diamonds): click or drag to scrub, drag a diamond to move a key, and posing on a frame with no key
+makes one. Onion skin shows the neighbouring key poses or nearby frames, blue before and orange after. The speed slider
+plays the motion faster or slower and shows where the keys would land; "Keep this timing" moves them there. Saves and
+opens a motion file, and saves the current frame as a PNG.
+
+A motion file is small enough to write by hand, so you can author a motion for the artist and have her open it:
+
+    {"kind": "animtk-body-motion", "version": 1, "fps": 24, "keys": [
+      {"frame": 1,  "ease": "inout", "label": "", "pose": {"x": 0, "y": 3.89, "shoulderR": 8, "elbowR": 12}},
+      {"frame": 13, "ease": "out",   "label": "", "pose": {"x": 0, "y": 3.89, "shoulderR": 150, "elbowR": 40}}]}
+
+Pose fields: `x`, `y` (hips, in head heights, ground at 0, standing hips at about 3.89), then angles in degrees:
+`lean`, `spine`, `neck`, and `shoulder`, `elbow`, `wrist`, `hip`, `knee`, `ankle` each with `R` (near side) or `L` (far
+side). 0 is the resting position and positive is the natural bend: arms and thighs swing forward, elbows and knees
+fold, the torso and head bow forward, toes lift. Anything left out is taken from the standing pose. `ease` is how the
+motion leaves that key: `inout`, `in`, `out` or `linear`.
 
 ---
 
@@ -245,6 +267,7 @@ Use whichever the artist asked for.
         cammove.py           camera move math                (mirrored in the app: CAM block)
         value.py             silhouette and grayscale        (mirrored in the app: VAL block)
         anatomy.py           rigs and checks
+    (app only: BODY block)   the mannequin math for Body mode, no Python twin
     examples/                a sample scene, blank landmark files
     tests/                   see below
     samples/ out/ tools/     git-ignored: artwork, results, Rhubarb
@@ -264,8 +287,9 @@ None of them need artwork: they generate their own stand-ins into `tests/out/`.
     node tests/test_app_ui.mjs           # Perspective mode in headless Chrome
     node tests/test_app_timing.mjs       # Timing mode
     node tests/test_app_camera.mjs       # Camera and Value modes, and their math against Python
+    node tests/test_app_body.mjs         # Body mode: mannequin math, posing, timeline, onion skin, timing
 
-The three browser tests need `npm i puppeteer-core` (it drives the Chrome or Edge already installed).
+The four browser tests need `npm i puppeteer-core` (it drives the Chrome or Edge already installed).
 
 ## Known limits (say these out loud when they apply)
 
@@ -275,6 +299,8 @@ The three browser tests need `npm i puppeteer-core` (it drives the Chrome or Edg
 - Camera move from drawings: it follows whatever lines the two drawings share, which is the character if the character fills the frame.
 - Silhouette of line art: which closed shapes are "figure" is a guess when the figure leaves the frame; check the picture.
 - Anatomy: depends entirely on where the joints were placed. Foreshortening explains many flags.
+- Body mode: a flat side view. It cannot turn to face the camera, and the far arm hides behind the torso when it hangs
+  (grab its dots). Joints bend as far as you drag them: nothing warns about impossible angles yet.
 - Lip sync: English recognition by default; a computer cannot hear acting, so treat the result as a first pass to adjust.
 - Tracker: a save through this tool rebuilds charts (they can lose styling) and drops drawn shapes, text boxes,
   slicers and sparklines. It warns when the workbook has any, and refuses `--in-place` without `--force`.

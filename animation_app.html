@@ -68,6 +68,7 @@ input[type=number],input[type=text],select{width:100%;background:var(--bg);color
     <button class="tab" data-mode="timing">Timing</button>
     <button class="tab" data-mode="camera">Camera</button>
     <button class="tab" data-mode="value">Value</button>
+    <button class="tab" data-mode="body">Body</button>
   </div>
   <span class="muted" style="margin-left:auto">works offline, nothing leaves this computer</span>
 </header>
@@ -325,6 +326,60 @@ input[type=number],input[type=text],select{width:100%;background:var(--bg);color
     </div>
   </div>
   <div class="stage" id="vStage"><canvas id="vView"></canvas><div class="readout" id="vReadout"></div></div>
+</section>
+
+<!-- ============================== BODY MODE ============================== -->
+<section class="mode" id="mode-body">
+  <div class="stage" id="bStage" style="display:flex;flex-direction:column">
+    <div style="flex:1;position:relative;min-height:0"><canvas id="bView"></canvas><div class="readout" id="bReadout"></div>
+      <div class="hint" id="bHint">Drag a body part to swing it from its joint. Drag a wrist or ankle dot to pull the whole arm or leg. Drag the hip diamond to move the body. Scroll to zoom.</div></div>
+    <div style="height:118px;border-top:1px solid var(--line);flex:none;display:flex;flex-direction:column;background:var(--bg)">
+      <div class="row" style="padding:4px 10px;margin:0;flex-wrap:nowrap"><button class="primary" id="bPlay" style="width:70px">Play</button><button id="bPrevK" title="Jump to the key pose before this frame">&lt; key</button><button id="bNextK" title="Jump to the key pose after this frame">key &gt;</button>
+        <label class="chk" style="margin:0 8px;flex:none"><input type="checkbox" id="bLoop" checked>Loop</label><label class="chk" style="margin:0 8px;flex:none"><input type="checkbox" id="bOnion">Onion skin</label><b id="bFrameLbl" style="margin-left:auto;text-align:right"></b></div>
+      <div style="flex:1;position:relative;min-height:0"><canvas id="bTime"></canvas></div>
+    </div>
+  </div>
+  <div class="side">
+    <div class="card">
+      <h2>Key poses</h2>
+      <div class="row"><button class="primary" id="bAdd" style="flex:1">Add key pose here</button><button id="bDel">Delete</button></div>
+      <div class="f2"><label>Frame</label><input type="number" id="bKF" min="1" step="1"></div>
+      <div class="f2"><label>Leaves</label><select id="bKE"><option value="inout">slow out, slow in</option><option value="in">slow out (speeds up)</option><option value="out">slow in (settles)</option><option value="linear">even speed</option></select></div>
+      <div class="muted">Pink diamonds on the timeline are key poses. Drag one sideways to change when it happens. Moving a joint on a frame with no key makes a new key pose there.</div>
+    </div>
+    <div class="card">
+      <h2>Timing</h2>
+      <div class="sl"><label>Speed</label><input type="range" id="bSpeed" min="-20" max="20" step="1" value="0"><output></output></div>
+      <div class="muted" id="bTimeInfo"></div>
+      <div class="row"><button id="bBake" style="flex:1" title="Move the key poses to the new frames">Keep this timing</button><button id="bSpeedReset">100%</button></div>
+    </div>
+    <div class="card">
+      <h2>Onion skin</h2>
+      <div class="f2"><label>Show</label><select id="bOnionMode"><option value="keys">the key poses next door</option><option value="frames">every 2nd frame around</option></select></div>
+      <div class="f2"><label>Count</label><select id="bOnionN"><option value="1">1 each side</option><option value="2">2 each side</option><option value="3">3 each side</option></select></div>
+      <div class="muted"><span class="dot" style="background:var(--blue)"></span>before this frame <span class="dot" style="background:var(--warn);margin-left:8px"></span>after it</div>
+    </div>
+    <div class="card">
+      <h2>Selected joint</h2>
+      <b id="bJointName"></b>
+      <div class="sl" style="grid-template-columns:1fr 46px"><input type="range" id="bAngle" min="-200" max="200" step="1" value="0"><output></output></div>
+      <div class="muted">Click a dot to pick a joint. 0 is the resting position.</div>
+    </div>
+    <div class="card">
+      <h2>Posing</h2>
+      <label class="chk"><input type="checkbox" id="bIK" checked>A wrist or ankle pulls the whole limb</label>
+      <label class="chk"><input type="checkbox" id="bPlant" checked>Feet stay put when the hips move</label>
+      <div class="row"><button id="bStand" style="flex:1">Standing pose</button><button id="bUndo" style="flex:1">Undo</button></div>
+      <button id="bDemo" style="width:100%">Load the starter motion</button>
+    </div>
+    <div class="card">
+      <h2>Save</h2>
+      <div class="row"><button class="primary" id="bSave" style="flex:1">Save motion</button><button id="bLoadBtn" style="flex:1">Open a motion</button></div>
+      <input type="file" id="bLoad" accept=".json,application/json" hidden>
+      <button id="bPng" style="width:100%">Save this frame (PNG)</button>
+      <div class="muted" id="bSaveInfo"></div>
+    </div>
+  </div>
 </section>
 
 <script>
@@ -633,6 +688,91 @@ const ValueMath = (() => {
   return { INK, morph, regions, outsideLabels, labelAt, silhouetteLines, otsu, posterize };
 })();
 /*VAL-END*/
+
+/*BODY-START*/
+// The mannequin's math. Side view, facing right, measured in head heights, y up, ground at 0.
+// Every angle is in degrees and reads the same way: 0 = at rest, positive = the natural bend
+// (an arm or thigh swings forward, an elbow or knee folds, the torso and head bow forward, toes lift).
+// R is the side nearest the viewer, L is the far side.
+const BodyMath = (() => {
+  const D = Math.PI / 180;
+  const PROPS = { head: 1, neck: 0.3, chest: 1.2, waist: 1.1, shoulderDrop: 0.25, upperArm: 1.45, forearm: 1.2, hand: 0.75, thigh: 1.85, shin: 1.75, foot: 0.85, heel: 0.25, ankleH: 0.3 };
+  const ANGLES = ['lean', 'spine', 'neck', 'shoulderR', 'elbowR', 'wristR', 'shoulderL', 'elbowL', 'wristL', 'hipR', 'kneeR', 'ankleR', 'hipL', 'kneeL', 'ankleL'];
+  const FIELDS = ['x', 'y'].concat(ANGLES), SIDES = ['R', 'L'];
+  const dir = a => [Math.sin(a * D), -Math.cos(a * D)];               // 0 = down, 90 = forward, 180 = up
+  const ang = (dx, dy) => Math.atan2(dx, -dy) / D;                     // and back again
+  const near = (a, ref) => a + 360 * Math.round((ref - a) / 360);      // the same direction, as the number closest to ref
+  const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+  function ease(t, kind) { t = clamp(t, 0, 1); if (kind === 'linear') return t; if (kind === 'in') return t * t; if (kind === 'out') return 1 - (1 - t) * (1 - t); return t * t * (3 - 2 * t); }
+
+  // pose -> where every joint is (J) and which way every bone points (W)
+  function fk(p, props) {
+    const P = props || PROPS, J = {}, W = {}, add = (o, a, len) => { const d = dir(a); return [o[0] + d[0] * len, o[1] + d[1] * len]; };
+    J.pelvis = [p.x, p.y];
+    W.waist = 180 - p.lean; J.spine = add(J.pelvis, W.waist, P.waist);
+    W.chest = W.waist - p.spine; J.neck = add(J.spine, W.chest, P.chest);
+    W.head = W.chest - p.neck; J.head = add(J.neck, W.head, P.neck + P.head);
+    const sh = add(J.spine, W.chest, P.chest - P.shoulderDrop);
+    for (const s of SIDES) {
+      J['shoulder' + s] = sh.slice();
+      W['upperArm' + s] = W.chest + 180 + p['shoulder' + s]; J['elbow' + s] = add(sh, W['upperArm' + s], P.upperArm);
+      W['forearm' + s] = W['upperArm' + s] + p['elbow' + s]; J['wrist' + s] = add(J['elbow' + s], W['forearm' + s], P.forearm);
+      W['hand' + s] = W['forearm' + s] + p['wrist' + s]; J['hand' + s] = add(J['wrist' + s], W['hand' + s], P.hand);
+      W['thigh' + s] = W.waist + 180 + p['hip' + s]; J['knee' + s] = add(J.pelvis, W['thigh' + s], P.thigh);
+      W['shin' + s] = W['thigh' + s] - p['knee' + s]; J['ankle' + s] = add(J['knee' + s], W['shin' + s], P.shin);
+      W['foot' + s] = W['shin' + s] + 90 + p['ankle' + s];
+      const a = J['ankle' + s], al = dir(W['foot' + s]), dn = dir(W['foot' + s] - 90);          // the sole sits ankleH under the ankle
+      J['heel' + s] = [a[0] + dn[0] * P.ankleH - al[0] * P.heel, a[1] + dn[1] * P.ankleH - al[1] * P.heel];
+      J['toe' + s] = [a[0] + dn[0] * P.ankleH + al[0] * P.foot, a[1] + dn[1] * P.ankleH + al[1] * P.foot];
+    }
+    return { J, W };
+  }
+  const lowest = (p, P) => { const J = fk(p, P).J; return Math.min(J.heelR[1], J.toeR[1], J.heelL[1], J.toeL[1]); };
+  function stand(P) {
+    const p = { x: 0, y: 0, lean: 0, spine: 0, neck: 0, shoulderR: 8, elbowR: 12, wristR: 0, shoulderL: -8, elbowL: 12, wristL: 0, hipR: 5, kneeR: 0, ankleR: -5, hipL: -5, kneeL: 0, ankleL: 5 };
+    p.y = -lowest(p, P); return p;
+  }
+  function clean(p) { const s = stand(), o = {}; for (const k of FIELDS) o[k] = p && Number.isFinite(+p[k]) && p[k] !== null && p[k] !== '' ? +p[k] : s[k]; return o; }
+
+  // two bones from a to the target t: [which way the first bone points, how far the middle joint folds].
+  // side = 1 when the second bone folds forward (an elbow), -1 when it folds back (a knee).
+  function reach(a, t, l1, l2, side) {
+    const dx = t[0] - a[0], dy = t[1] - a[1], d = clamp(Math.hypot(dx, dy), Math.abs(l1 - l2) + 1e-6, l1 + l2 - 1e-6);
+    const al = Math.acos(clamp((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d), -1, 1)) / D;
+    return [ang(dx, dy) - side * al, 180 - Math.acos(clamp((l1 * l1 + l2 * l2 - d * d) / (2 * l1 * l2), -1, 1)) / D];
+  }
+  function pullArm(p, s, t, P) {                      // put the wrist on t; the hand keeps its bend
+    P = P || PROPS; const f = fk(p, P), side = p['elbow' + s] < 0 ? -1 : 1, r = reach(f.J['shoulder' + s], t, P.upperArm, P.forearm, side), q = Object.assign({}, p);
+    q['shoulder' + s] = near(r[0] - f.W.chest - 180, p['shoulder' + s]); q['elbow' + s] = side * r[1]; return q;
+  }
+  function pullLeg(p, s, t, P, footW) {               // put the ankle on t; the foot keeps pointing the way it was (or the way footW says)
+    P = P || PROPS; const f = fk(p, P), side = p['knee' + s] < 0 ? 1 : -1, r = reach(f.J.pelvis, t, P.thigh, P.shin, side), q = Object.assign({}, p);
+    q['hip' + s] = near(r[0] - f.W.waist - 180, p['hip' + s]); q['knee' + s] = -side * r[1];
+    q['ankle' + s] = near((footW == null ? f.W['foot' + s] : footW) - (f.W.waist + 180 + q['hip' + s] - q['knee' + s]) - 90, p['ankle' + s]); return q;
+  }
+  function moveHips(p, x, y, plant, P) {             // move the body; with plant the ankles stay where they were
+    const f = fk(p, P); let q = Object.assign({}, p, { x, y });
+    if (plant) for (const s of SIDES) q = pullLeg(q, s, f.J['ankle' + s], P); return q;
+  }
+  function leanTo(p, lean) { const q = Object.assign({}, p, { lean }); for (const s of SIDES) q['hip' + s] = p['hip' + s] + lean - p.lean; return q; }   // tip the body, legs stay
+
+  // ---------- time: key poses, the pose on any frame, and stretching or squeezing the timing
+  function mix(a, b, t) { const o = {}; for (const k of FIELDS) o[k] = a[k] + (b[k] - a[k]) * t; return o; }
+  function poseAt(keys, f, P) {                       // keys sorted by frame; the first and last pose hold outside the motion
+    const n = keys.length - 1; if (f <= keys[0].frame) return Object.assign({}, keys[0].pose); if (f >= keys[n].frame) return Object.assign({}, keys[n].pose);
+    let i = 0; while (keys[i + 1].frame <= f) i++; const a = keys[i], b = keys[i + 1];
+    let q = mix(a.pose, b.pose, ease((f - a.frame) / (b.frame - a.frame), a.ease));
+    const fa = fk(a.pose, P), fb = fk(b.pose, P);     // a foot that is on the same spot in both key poses stays on it in between
+    for (const s of SIDES) { const u = fa.J['ankle' + s], v = fb.J['ankle' + s], w = fa.W['foot' + s];
+      if (Math.hypot(u[0] - v[0], u[1] - v[1]) < 0.02 && Math.abs(near(fb.W['foot' + s], w) - w) < 1) q = pullLeg(q, s, u, P, w); }
+    return q;
+  }
+  function retime(frames, speed) {                    // 2 = twice as fast = half the frames; keys never land on the same frame
+    const out = []; frames.forEach((f, i) => { let v = frames[0] + Math.round((f - frames[0]) / speed); if (i && v <= out[i - 1]) v = out[i - 1] + 1; out.push(v); }); return out;
+  }
+  return { PROPS, ANGLES, FIELDS, dir, ang, near, ease, fk, lowest, stand, clean, reach, pullArm, pullLeg, moveHips, leanTo, mix, poseAt, retime };
+})();
+/*BODY-END*/
 </script>
 
 <script>
@@ -1556,6 +1696,263 @@ const Value = (() => {
   window.addEventListener('resize', () => { if (active()) draw(); });
   sync();
   return { Vs, loadFiles, work, result: () => R, click, sync, exportCanvas, boxes: () => boxes };
+})();
+
+// ============================== BODY MODE ==============================
+const Body = (() => {
+  const M = BodyMath, P = M.PROPS, KEY = 'animtk-body', FPS = 24, SIDES = ['R', 'L'], EASES = ['inout', 'in', 'out', 'linear'];
+  const B = { keys: [], cur: 1, sel: 'elbowR', playing: false, loop: true, onion: false, onionMode: 'keys', onionN: 1, speed: 1, ik: true, plant: true, zoom: 1, cx: 0, cy: 4.5 };
+  const view = $('#bView'), ctx = view.getContext('2d'), tl = $('#bTime'), tctx = tl.getContext('2d');
+  const active = () => $('#mode-body').classList.contains('on');
+  const OUT = '#0e0d11', NEAR = '#ece8f4', MID = '#cbc5d8', FAR = '#7f7a90', BEFORE = '#4d8dff', AFTER = '#ffa23a', ACC = '#ff8fb8';
+  let tf = null, ttf = null, drag = null, tdrag = null, raf = 0, undo = [], note = '', sliding = false;
+
+  // which angle each joint owns, where it pivots, and which way a drag turns it
+  const LABEL = { lean: 'Hips (whole body lean)', spine: 'Spine', neck: 'Neck' };
+  const ACT = { lean: ['pelvis', -1], spine: ['spine', -1], neck: ['neck', -1] };
+  const OWN = { pelvis: 'lean', spine: 'spine', neck: 'neck', head: 'neck', shoulderR: 'shoulderR' };
+  const DOTACT = { pelvis: 'move', spine: 'lean', neck: 'spine', head: 'neck', shoulderR: '' };
+  for (const s of SIDES) {
+    const w = s === 'R' ? 'Near ' : 'Far ';
+    Object.assign(LABEL, { ['shoulder' + s]: w + 'shoulder', ['elbow' + s]: w + 'elbow', ['wrist' + s]: w + 'wrist', ['hip' + s]: w + 'hip', ['knee' + s]: w + 'knee', ['ankle' + s]: w + 'ankle' });
+    Object.assign(ACT, { ['shoulder' + s]: ['shoulder' + s, 1], ['elbow' + s]: ['elbow' + s, 1], ['wrist' + s]: ['wrist' + s, 1], ['hip' + s]: ['pelvis', 1], ['knee' + s]: ['knee' + s, -1], ['ankle' + s]: ['ankle' + s, 1] });
+    Object.assign(OWN, { ['elbow' + s]: 'elbow' + s, ['wrist' + s]: 'wrist' + s, ['hand' + s]: 'wrist' + s, ['knee' + s]: 'knee' + s, ['ankle' + s]: 'ankle' + s, ['toe' + s]: 'ankle' + s });
+    Object.assign(DOTACT, { ['elbow' + s]: 'shoulder' + s, ['wrist' + s]: 'arm' + s, ['hand' + s]: 'wrist' + s, ['knee' + s]: 'hip' + s, ['ankle' + s]: 'leg' + s, ['toe' + s]: 'ankle' + s });
+  }
+  const armDots = s => ['hand' + s, 'wrist' + s, 'elbow' + s], legDots = s => ['toe' + s, 'ankle' + s, 'knee' + s];
+  const DOTS = [...armDots('R'), 'shoulderR', ...legDots('R'), 'head', 'neck', 'spine', 'pelvis', ...legDots('L'), ...armDots('L')];     // front first
+  const armBones = s => [['shoulder' + s, 'elbow' + s, 0.32, 'shoulder' + s], ['elbow' + s, 'wrist' + s, 0.27, 'elbow' + s], ['wrist' + s, 'hand' + s, 0.2, 'wrist' + s]];
+  const legBones = s => [['pelvis', 'knee' + s, 0.46, 'hip' + s], ['knee' + s, 'ankle' + s, 0.34, 'knee' + s], ['ankle' + s, 'toe' + s, 0.3, 'ankle' + s], ['ankle' + s, 'heel' + s, 0.3, 'ankle' + s]];
+  const BONES = [...armBones('R'), ...legBones('R'), ['neck', 'head', 0.8, 'neck'], ['spine', 'neck', 1.0, 'spine'], ['pelvis', 'spine', 0.95, 'lean'], ...legBones('L'), ...armBones('L')];
+
+  // ---------- key poses
+  const sortKeys = () => B.keys.sort((a, b) => a.frame - b.frame);
+  const first = () => B.keys[0].frame, last = () => B.keys[B.keys.length - 1].frame;
+  const keyAt = f => B.keys.findIndex(k => k.frame === Math.round(f));
+  const pose = f => M.poseAt(B.keys, f == null ? B.cur : f);
+  const cycle = () => { const a = B.keys[0].pose, b = B.keys[B.keys.length - 1].pose; return B.keys.length > 2 && M.FIELDS.every(k => Math.abs(a[k] - b[k]) < 0.01); };
+  function pushUndo() { undo.push(JSON.stringify({ keys: B.keys, cur: Math.round(B.cur) })); if (undo.length > 60) undo.shift(); }
+  function doUndo() { const u = undo.pop(); if (!u) return; if (B.playing) stop(); const o = JSON.parse(u); B.keys = o.keys; B.cur = o.cur; note = 'Undone'; sync(); }
+  function ensureKey() {                               // the key pose on this frame, made from the inbetween if there was none
+    const f = Math.round(B.cur); B.cur = f; const i = keyAt(f); if (i >= 0) return B.keys[i];
+    let prev = null; for (const k of B.keys) if (k.frame < f) prev = k;
+    const k = { frame: f, ease: prev ? prev.ease : 'inout', label: '', pose: pose(f) }; B.keys.push(k); sortKeys(); note = 'New key pose at frame ' + f; return k;
+  }
+  function starter() {                                 // crouch, stretch up, settle: something to scrub straight away
+    const a = M.stand(); let c = M.leanTo(M.moveHips(a, -0.35, a.y - 1.0, true), 30);
+    c = Object.assign(c, { spine: 14, neck: -14, shoulderR: -38, elbowR: 30, shoulderL: -54, elbowL: 24 });
+    const u = Object.assign({}, a, { spine: -7, neck: -16, shoulderR: 170, elbowR: 8, shoulderL: 156, elbowL: 12 });
+    return [{ frame: 1, ease: 'inout', label: '', pose: a }, { frame: 13, ease: 'inout', label: '', pose: c }, { frame: 21, ease: 'out', label: '', pose: u }, { frame: 37, ease: 'inout', label: '', pose: M.stand() }];
+  }
+  const r2 = v => Math.round(v * 100) / 100;
+  function motionJSON() { return { kind: 'animtk-body-motion', version: 1, fps: FPS, keys: B.keys.map(k => { const pose = {}; for (const n of M.FIELDS) pose[n] = r2(k.pose[n]); return { frame: k.frame, ease: k.ease, label: k.label || '', pose }; }) }; }
+  function loadMotion(j) {
+    if (!j || !Array.isArray(j.keys) || !j.keys.length) return false; const seen = {};
+    B.keys = j.keys.map(k => ({ frame: Math.max(1, Math.round(+k.frame) || 1), ease: EASES.includes(k.ease) ? k.ease : 'inout', label: k.label ? String(k.label) : '', pose: M.clean(k.pose) }))
+      .sort((a, b) => a.frame - b.frame).filter(k => !seen[k.frame] && (seen[k.frame] = 1));
+    B.cur = B.keys[0].frame; B.speed = 1; return true;
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify({ motion: motionJSON(), ui: { loop: B.loop, onion: B.onion, onionMode: B.onionMode, onionN: B.onionN, ik: B.ik, plant: B.plant } })); } catch (e) {} }
+
+  // ---------- the picture
+  function fitCanvas(c) { const dpr = window.devicePixelRatio || 1, r = c.parentElement.getBoundingClientRect(), w = Math.round(r.width * dpr), h = Math.round(r.height * dpr); if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } return dpr; }
+  const scr = p => [tf.ox + p[0] * tf.s, tf.oy - p[1] * tf.s], wld = m => [(m[0] - tf.ox) / tf.s, (tf.oy - m[1]) / tf.s];
+  function headShape(g, f) { const d = M.dir(f.W.head), n = f.J.neck, k = P.neck + P.head / 2, c = scr([n[0] + d[0] * k, n[1] + d[1] * k]); g.beginPath(); g.ellipse(c[0], c[1], P.head / 2 * tf.s, 0.4 * tf.s, Math.atan2(-d[1], d[0]), 0, 7); }
+  function figure(g, f) {
+    const s = tf.s, dpr = tf.dpr, J = f.J, W = f.W, S = n => scr(J[n]);
+    const seg = (a, b, wd, col) => { g.lineCap = 'round'; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.strokeStyle = OUT; g.lineWidth = wd * s + 3 * dpr; g.stroke(); g.strokeStyle = col; g.lineWidth = wd * s; g.stroke(); };
+    const from = (n, a, u, v) => { const d = M.dir(a), e = M.dir(a - 90), p = J[n]; return scr([p[0] + d[0] * u + e[0] * (v || 0), p[1] + d[1] * u + e[1] * (v || 0)]); };
+    const arm = (sd, col) => { seg(S('shoulder' + sd), S('elbow' + sd), 0.32, col); seg(S('elbow' + sd), S('wrist' + sd), 0.27, col); seg(S('wrist' + sd), S('hand' + sd), 0.2, col); };
+    const leg = (sd, col) => {
+      seg(S('pelvis'), S('knee' + sd), 0.46, col); seg(S('knee' + sd), S('ankle' + sd), 0.34, col);
+      const a = W['foot' + sd], n = 'ankle' + sd, h = P.ankleH, pts = [from(n, a, -P.heel, h), from(n, a, P.foot, h), from(n, a, P.foot * 0.62, h - 0.2), from(n, a, 0.15, -0.08), from(n, a, -0.15, -0.08), from(n, a, -P.heel - 0.02, h - 0.12)];
+      g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.lineJoin = 'round';
+      g.strokeStyle = OUT; g.lineWidth = 0.1 * s + 3 * dpr; g.stroke(); g.strokeStyle = col; g.lineWidth = 0.1 * s; g.stroke(); g.fillStyle = col; g.fill();
+    };
+    arm('L', FAR); leg('L', FAR);
+    seg(S('pelvis'), S('spine'), 0.95, MID); seg(S('spine'), from('spine', W.chest, P.chest - 0.42), 1.02, MID); seg(S('neck'), from('neck', W.head, P.neck + 0.1), 0.3, MID);
+    const k = P.neck + P.head / 2, nose = [from('neck', W.head, k + 0.06, 0.36), from('neck', W.head, k - 0.04, 0.56), from('neck', W.head, k - 0.16, 0.36)];
+    g.beginPath(); nose.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.lineJoin = 'round'; g.strokeStyle = OUT; g.lineWidth = 3 * dpr; g.stroke(); g.fillStyle = MID; g.fill();
+    headShape(g, f); g.strokeStyle = OUT; g.lineWidth = 3 * dpr; g.stroke(); g.fillStyle = MID; g.fill();
+    const eye = from('neck', W.head, k + 0.1, 0.2); g.beginPath(); g.arc(eye[0], eye[1], 0.045 * s, 0, 7); g.fillStyle = OUT; g.fill();
+    leg('R', NEAR); arm('R', NEAR);
+  }
+  function ghost(g, f, col, alpha) {
+    const S = n => scr(f.J[n]), path = ns => { g.beginPath(); ns.forEach((n, i) => { const p = S(n); i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.stroke(); };
+    g.save(); g.globalAlpha = alpha; g.strokeStyle = col; g.lineWidth = 2.5 * tf.dpr; g.lineCap = g.lineJoin = 'round';
+    path(['pelvis', 'spine', 'neck']); headShape(g, f); g.stroke();
+    for (const s of SIDES) { path(['shoulder' + s, 'elbow' + s, 'wrist' + s, 'hand' + s]); path(['pelvis', 'knee' + s, 'ankle' + s, 'heel' + s, 'toe' + s, 'ankle' + s]); }
+    g.restore();
+  }
+  function ghosts() {                                  // which frames the onion skin shows: side -1 = before, 1 = after, rank 1 = nearest
+    const out = [], f = B.cur, n = B.onionN;
+    if (B.onionMode === 'keys') {
+      B.keys.filter(k => k.frame < f - 1e-6).reverse().slice(0, n).forEach((k, i) => out.push({ frame: k.frame, side: -1, rank: i + 1 }));
+      B.keys.filter(k => k.frame > f + 1e-6).slice(0, n).forEach((k, i) => out.push({ frame: k.frame, side: 1, rank: i + 1 }));
+    } else for (let i = 1; i <= n; i++) { if (f - 2 * i >= first()) out.push({ frame: f - 2 * i, side: -1, rank: i }); if (f + 2 * i <= last()) out.push({ frame: f + 2 * i, side: 1, rank: i }); }
+    return out;
+  }
+  function dots(g, f, p) {
+    const dpr = tf.dpr;
+    for (let i = DOTS.length - 1; i >= 0; i--) {
+      const n = DOTS[i], c = scr(f.J[n]), r = (n === 'pelvis' ? 7.5 : /^(wrist|ankle)/.test(n) ? 6 : 4.5) * dpr; g.beginPath();
+      if (n === 'pelvis') { g.moveTo(c[0], c[1] - r); g.lineTo(c[0] + r, c[1]); g.lineTo(c[0], c[1] + r); g.lineTo(c[0] - r, c[1]); g.closePath(); } else g.arc(c[0], c[1], r, 0, 7);
+      g.fillStyle = OUT; g.fill(); g.strokeStyle = /L$/.test(n) ? '#a8627f' : ACC; g.lineWidth = 2 * dpr; g.stroke();
+    }
+    const c = scr(f.J[ACT[B.sel][0]]), txt = LABEL[B.sel] + '  ' + Math.round(p[B.sel]) + '°';
+    g.beginPath(); g.arc(c[0], c[1], 10 * dpr, 0, 7); g.strokeStyle = '#fff'; g.lineWidth = 2 * dpr; g.stroke(); g.beginPath(); g.arc(c[0], c[1], 4 * dpr, 0, 7); g.fillStyle = ACC; g.fill();
+    g.font = '600 ' + 12 * dpr + 'px system-ui,"Segoe UI",sans-serif'; g.textBaseline = 'middle'; g.textAlign = 'left';
+    const tw = g.measureText(txt).width, bx = Math.min(c[0] + 16 * dpr, view.width - tw - 18 * dpr), by = Math.max(c[1] - 24 * dpr, 14 * dpr);
+    g.fillStyle = 'rgba(22,21,26,.9)'; g.beginPath(); g.roundRect(bx - 7 * dpr, by - 11 * dpr, tw + 14 * dpr, 22 * dpr, 7 * dpr); g.fill(); g.strokeStyle = ACC; g.lineWidth = dpr; g.stroke(); g.fillStyle = '#fff'; g.fillText(txt, bx, by + dpr);
+  }
+  function draw() {
+    const dpr = fitCanvas(view), w = view.width, h = view.height; if (!w || !h) return;
+    const s = Math.min(h / 10.8, w / 9) * B.zoom; tf = { s, ox: w / 2 - B.cx * s, oy: h / 2 + B.cy * s, dpr };
+    ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#17151d'; ctx.fillRect(0, tf.oy, w, Math.max(0, h - tf.oy)); ctx.fillStyle = '#3b3846'; ctx.fillRect(0, tf.oy, w, Math.max(1, dpr));
+    if (B.onion) for (const gh of ghosts().reverse()) ghost(ctx, M.fk(pose(gh.frame)), gh.side < 0 ? BEFORE : AFTER, 0.85 / Math.pow(gh.rank, 0.8));
+    const p = pose(), f = M.fk(p); figure(ctx, f); if (!B.playing) dots(ctx, f, p);
+  }
+  function drawTime() {
+    const dpr = fitCanvas(tl), w = tl.width, h = tl.height; if (!w || !h) return; const g = tctx, fr = B.keys.map(k => k.frame), rt = M.retime(fr, B.speed);
+    const end = Math.max(last() + 6, rt[rt.length - 1] + 3, 30), x0 = 24 * dpr, px = (w - 48 * dpr) / (end - 1), X = f => x0 + (f - 1) * px, ky = h * 0.33; ttf = { x0, px, end, dpr, ky };
+    g.clearRect(0, 0, w, h); g.fillStyle = 'rgba(255,143,184,.13)'; g.fillRect(X(first()), ky - 11 * dpr, X(last()) - X(first()), 22 * dpr);
+    let step = 1; for (const c of [1, 2, 4, 6, 12, 24, 48, 96, 240]) { step = c; if (c * px >= 30 * dpr) break; }
+    g.font = 11 * dpr + 'px system-ui,"Segoe UI",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    for (let f = 1; f <= end; f++) { const big = (f - 1) % step === 0; if (!big && px < 4 * dpr) continue; g.fillStyle = big ? '#6f6a80' : '#3b3846'; g.fillRect(Math.round(X(f)), h - (big ? 24 : 19) * dpr, Math.max(1, dpr), (big ? 9 : 4) * dpr); if (big) { g.fillStyle = '#a6a1b4'; g.fillText(f, X(f), h - 4 * dpr); } }
+    const dia = (x, y, r) => { g.beginPath(); g.moveTo(x, y - r); g.lineTo(x + r, y); g.lineTo(x, y + r); g.lineTo(x - r, y); g.closePath(); };
+    if (B.speed !== 1) rt.forEach((f, i) => { g.strokeStyle = AFTER; g.globalAlpha = 0.5; g.lineWidth = dpr; g.beginPath(); g.moveTo(X(fr[i]), ky); g.lineTo(X(f), ky + 17 * dpr); g.stroke(); g.globalAlpha = 1; dia(X(f), ky + 17 * dpr, 5 * dpr); g.lineWidth = 1.5 * dpr; g.stroke(); });
+    B.keys.forEach(k => { dia(X(k.frame), ky, 7 * dpr); g.fillStyle = ACC; g.fill(); if (!B.playing && k.frame === Math.round(B.cur)) { g.strokeStyle = '#fff'; g.lineWidth = 2 * dpr; g.stroke(); } });
+    g.fillStyle = '#fff'; g.fillRect(X(B.cur) - 0.75 * dpr, 2 * dpr, 1.5 * dpr, h - 28 * dpr);
+  }
+
+  // ---------- panel
+  function sync(light) {
+    const f = Math.round(B.cur), i = keyAt(B.cur), p = pose(), n = last() - first(), pct = Math.round(B.speed * 100);
+    $('#bFrameLbl').textContent = 'Frame ' + (B.playing ? Math.floor(B.cur) : f) + ' of ' + last() + (B.playing ? '' : i >= 0 ? '   key pose' : f > first() && f < last() ? '   inbetween' : '');
+    if (!B.playing || !light) {
+      $('#bAdd').disabled = i >= 0; $('#bDel').disabled = i < 0 || B.keys.length < 2;
+      const kf = $('#bKF'); kf.disabled = i < 0; if (document.activeElement !== kf) kf.value = f;
+      let kb = B.keys[0]; for (const k of B.keys) if (k.frame <= f) kb = k; $('#bKE').value = kb.ease;
+      const sp = $('#bSpeed'); sp.value = Math.round(Math.log2(B.speed) * 10); sp.nextElementSibling.textContent = pct + '%';
+      const rt = M.retime(B.keys.map(k => k.frame), B.speed), n2 = rt[rt.length - 1] - rt[0], sec = v => (v / FPS).toFixed(2).replace(/\.?0+$/, '') + ' s';
+      $('#bTimeInfo').textContent = 'The motion runs ' + n + ' frames = ' + sec(n) + ' at ' + FPS + ' frames a second.' + (B.speed === 1 ? ' Slide to watch it faster or slower.' : ' At ' + pct + '% it takes ' + n2 + ' frames = ' + sec(n2) + '. The hollow diamonds show where each key pose would land.');
+      $('#bBake').disabled = B.speed === 1;
+      $('#bJointName').textContent = LABEL[B.sel]; const an = $('#bAngle'); if (!sliding) an.value = AT.clamp(Math.round(p[B.sel]), -200, 200); an.nextElementSibling.textContent = Math.round(p[B.sel]) + '°';
+      $('#bLoop').checked = B.loop; $('#bOnion').checked = B.onion; $('#bOnionMode').value = B.onionMode; $('#bOnionN').value = B.onionN; $('#bIK').checked = B.ik; $('#bPlant').checked = B.plant;
+      $('#bUndo').disabled = !undo.length; const ro = $('#bReadout'); ro.textContent = note; ro.style.display = note ? '' : 'none';
+    }
+    draw(); drawTime(); if (!light) save();
+  }
+
+  // ---------- playing
+  function stop() { B.playing = false; cancelAnimationFrame(raf); B.cur = AT.clamp(Math.round(B.cur), first(), last()); $('#bPlay').textContent = 'Play'; sync(true); }
+  function play() {
+    if (B.keys.length < 2) return; B.playing = true; note = ''; $('#bPlay').textContent = 'Stop';
+    let t0 = performance.now(), n0 = B.cur >= last() || B.cur < first() ? 0 : (B.cur - first()) / B.speed;
+    const tick = now => {
+      if (!B.playing) return; let f = first() + (n0 + Math.floor((now - t0) / 1000 * FPS)) * B.speed;      // one step per 24th of a second, as the retimed motion would show
+      if (cycle() ? f >= last() - 1e-9 : f > last() + 1e-9) { if (!B.loop) { B.cur = last(); stop(); return; } t0 = now; n0 = 0; f = first(); }
+      if (f !== B.cur) { B.cur = f; sync(true); } raf = requestAnimationFrame(tick);
+    };
+    sync(true); raf = requestAnimationFrame(tick);
+  }
+  function jump(d) { if (B.playing) stop(); const f = Math.round(B.cur), ks = B.keys.filter(k => d < 0 ? k.frame < f : k.frame > f); if (ks.length) { B.cur = (d < 0 ? ks[ks.length - 1] : ks[0]).frame; note = ''; sync(true); } }
+
+  // ---------- controls
+  const blur = e => e.target.blur();
+  $('#mode-body').addEventListener('click', e => { const b = e.target.closest('button'); if (b) b.blur(); });      // so Space plays instead of pressing the last button again
+  $('#bPlay').onclick = () => B.playing ? stop() : play();
+  $('#bPrevK').onclick = () => jump(-1); $('#bNextK').onclick = () => jump(1);
+  $('#bLoop').onchange = e => { B.loop = e.target.checked; blur(e); sync(); };
+  $('#bOnion').onchange = e => { B.onion = e.target.checked; blur(e); sync(); };
+  $('#bOnionMode').onchange = e => { B.onionMode = e.target.value; B.onion = true; sync(); }; $('#bOnionN').onchange = e => { B.onionN = +e.target.value; B.onion = true; sync(); };
+  $('#bIK').onchange = e => { B.ik = e.target.checked; blur(e); sync(); }; $('#bPlant').onchange = e => { B.plant = e.target.checked; blur(e); sync(); };
+  $('#bAdd').onclick = () => { if (B.playing) stop(); if (keyAt(B.cur) >= 0) return; pushUndo(); ensureKey(); sync(); };
+  $('#bDel').onclick = () => { if (B.playing) stop(); const i = keyAt(B.cur); if (i < 0 || B.keys.length < 2) return; pushUndo(); B.keys.splice(i, 1); note = 'Key pose removed'; sync(); };
+  $('#bKF').onchange = e => { const i = keyAt(B.cur), v = Math.max(1, Math.round(+e.target.value) || 1); if (i < 0) return; if (keyAt(v) >= 0) { if (keyAt(v) !== i) note = 'Frame ' + v + ' already has a key pose'; } else { pushUndo(); B.keys[i].frame = v; sortKeys(); B.cur = v; note = ''; } e.target.blur(); sync(); };
+  $('#bKE').onchange = e => { let kb = B.keys[0]; for (const k of B.keys) if (k.frame <= Math.round(B.cur)) kb = k; pushUndo(); kb.ease = e.target.value; sync(); };
+  $('#bSpeed').oninput = e => { B.speed = +e.target.value === 0 ? 1 : Math.round(Math.pow(2, +e.target.value / 10) * 100) / 100; sync(true); }; $('#bSpeed').onchange = e => { blur(e); sync(); };
+  $('#bSpeedReset').onclick = () => { B.speed = 1; sync(); };
+  $('#bBake').onclick = () => { if (B.speed === 1) return; const was = B.playing; if (was) stop(); pushUndo(); const k = keyAt(B.cur), rt = M.retime(B.keys.map(q => q.frame), B.speed), f0 = first();
+    B.cur = k >= 0 ? rt[k] : AT.clamp(f0 + Math.round((B.cur - f0) / B.speed), rt[0], rt[rt.length - 1]); B.keys.forEach((q, i) => q.frame = rt[i]); B.speed = 1; note = 'Timing kept: the key poses moved'; sync(); if (was) play(); };
+  $('#bAngle').addEventListener('input', e => { if (B.playing) stop(); if (!sliding) { pushUndo(); sliding = true; } const k = ensureKey(), v = +e.target.value; k.pose = B.sel === 'lean' ? M.leanTo(k.pose, v) : Object.assign({}, k.pose, { [B.sel]: v }); sync(true); });
+  $('#bAngle').addEventListener('change', e => { sliding = false; blur(e); sync(); });
+  $('#bStand').onclick = () => { if (B.playing) stop(); pushUndo(); const k = ensureKey(); k.pose = Object.assign(M.stand(), { x: k.pose.x }); sync(); };
+  $('#bDemo').onclick = () => { if (B.playing) stop(); pushUndo(); B.keys = starter(); B.cur = 1; B.speed = 1; note = 'Starter motion: crouch, stretch, settle'; sync(); };
+  $('#bUndo').onclick = doUndo;
+  $('#bSave').onclick = () => { download(new Blob([JSON.stringify(motionJSON(), null, 1)], { type: 'application/json' }), 'body_motion.json'); $('#bSaveInfo').textContent = 'Saved body_motion.json (' + B.keys.length + ' key poses).'; };
+  $('#bLoadBtn').onclick = () => $('#bLoad').click();
+  async function openFile(file) { let j = null; try { j = JSON.parse(await file.text()); } catch (e) {} if (B.playing) stop(); const keep = JSON.stringify({ keys: B.keys, cur: Math.round(B.cur) });
+    if (j && j.kind === 'animtk-body-motion' && loadMotion(j)) { undo.push(keep); $('#bSaveInfo').textContent = 'Opened ' + file.name + ' (' + B.keys.length + ' key poses).'; note = ''; } else $('#bSaveInfo').textContent = file.name + ' is not a saved body motion.'; sync(); }
+  $('#bLoad').onchange = e => { if (e.target.files[0]) openFile(e.target.files[0]); e.target.value = ''; };
+  $('#bPng').onclick = () => { const c = document.createElement('canvas'); c.width = view.width; c.height = view.height; const g = c.getContext('2d'); g.fillStyle = OUT; g.fillRect(0, 0, c.width, c.height); g.drawImage(view, 0, 0);
+    c.toBlob(b => { const name = 'body_frame_' + String(Math.round(B.cur)).padStart(4, '0') + '.png'; download(b, name); $('#bSaveInfo').textContent = 'Saved ' + name + '.'; }); };
+
+  // ---------- posing with the mouse
+  const pos = e => { const r = view.getBoundingClientRect(), d = view.width / r.width; return [(e.clientX - r.left) * d, (e.clientY - r.top) * d]; };
+  const dseg = (m, a, b) => { const vx = b[0] - a[0], vy = b[1] - a[1], t = AT.clamp(((m[0] - a[0]) * vx + (m[1] - a[1]) * vy) / (vx * vx + vy * vy || 1), 0, 1); return Math.hypot(m[0] - a[0] - vx * t, m[1] - a[1] - vy * t); };
+  function hit(m) {                                    // a dot first, then the body part in front
+    const J = M.fk(pose()).J, dpr = tf.dpr; let best = null, bd = 11 * dpr;
+    for (const n of DOTS) { const p = scr(J[n]), d = Math.hypot(p[0] - m[0], p[1] - m[1]); if (d < bd) { bd = d; best = n; } }
+    if (best) { let a = DOTACT[best]; if (!B.ik && /^(arm|leg)/.test(a)) a = (a[0] === 'a' ? 'elbow' : 'knee') + a.slice(-1); return { act: a, own: OWN[best] }; }
+    for (const [a, b, wd, par] of BONES) if (dseg(m, scr(J[a]), scr(J[b])) <= Math.max(wd * tf.s / 2, 6 * dpr)) return { act: par, own: par };
+    return null;
+  }
+  function begin() {                                   // the first real movement of a drag: make sure this frame is a key pose, remember where it started
+    pushUndo(); const k = ensureKey(), p0 = Object.assign({}, k.pose), f = M.fk(p0), w = wld(drag.m), a = drag.act; Object.assign(drag, { live: true, key: k, p0, q: p0 });
+    if (a === 'move') { drag.off = [w[0] - p0.x, w[1] - p0.y]; B.sel = 'lean'; }
+    else if (/^(arm|leg)/.test(a)) { const s = a.slice(-1), arm = a[0] === 'a', j = f.J[(arm ? 'wrist' : 'ankle') + s]; drag.off = [w[0] - j[0], w[1] - j[1]]; B.sel = (arm ? 'elbow' : 'knee') + s; }
+    else { drag.piv = f.J[ACT[a][0]]; drag.a0 = drag.last = M.ang(w[0] - drag.piv[0], w[1] - drag.piv[1]); B.sel = a; }
+  }
+  view.addEventListener('pointerdown', e => { if (B.playing) stop(); const m = pos(e), h = hit(m); view.setPointerCapture(e.pointerId); note = '';
+    drag = h ? Object.assign(h, { m, live: false }) : { pan: true, m, cx: B.cx, cy: B.cy }; });
+  view.addEventListener('pointermove', e => {
+    const m = pos(e); if (!drag) { if (tf) view.style.cursor = hit(m) ? 'grab' : 'default'; return; }
+    if (drag.pan) { B.cx = drag.cx - (m[0] - drag.m[0]) / tf.s; B.cy = drag.cy + (m[1] - drag.m[1]) / tf.s; draw(); return; }
+    if (!drag.act) return; if (!drag.live) { if (Math.hypot(m[0] - drag.m[0], m[1] - drag.m[1]) < 3 * tf.dpr) return; begin(); }
+    const w = wld(m), a = drag.act; let q;
+    if (a === 'move') q = M.moveHips(drag.p0, w[0] - drag.off[0], w[1] - drag.off[1], B.plant);
+    else if (/^arm/.test(a)) q = M.pullArm(drag.q, a.slice(-1), [w[0] - drag.off[0], w[1] - drag.off[1]]);
+    else if (/^leg/.test(a)) q = M.pullLeg(drag.q, a.slice(-1), [w[0] - drag.off[0], w[1] - drag.off[1]]);
+    else { const t = M.near(M.ang(w[0] - drag.piv[0], w[1] - drag.piv[1]), drag.last); drag.last = t; let v = drag.p0[a] + (t - drag.a0) * ACT[a][1]; if (e.shiftKey) v = Math.round(v / 15) * 15;
+      q = a === 'lean' ? M.leanTo(drag.p0, v) : Object.assign({}, drag.p0, { [a]: v }); }
+    drag.q = q; drag.key.pose = q; sync(true);
+  });
+  const drop = () => { if (!drag) return; const d = drag; drag = null; if (d.pan) return; if (!d.live) { if (d.own) B.sel = d.own; sync(true); } else sync(); };
+  view.addEventListener('pointerup', drop); view.addEventListener('pointercancel', drop);
+  view.addEventListener('wheel', e => { e.preventDefault(); B.zoom = AT.clamp(B.zoom * Math.exp(-e.deltaY * 0.0012), 0.4, 3); draw(); }, { passive: false });
+  view.addEventListener('dblclick', e => { if (!hit(pos(e))) { B.zoom = 1; B.cx = 0; B.cy = 4.5; draw(); } });
+
+  // ---------- the timeline: click or drag to scrub, drag a diamond to move that key pose
+  const tpos = e => { const r = tl.getBoundingClientRect(), d = tl.width / r.width; return [(e.clientX - r.left) * d, (e.clientY - r.top) * d]; };
+  const tFrame = mx => AT.clamp(Math.round((mx - ttf.x0) / ttf.px) + 1, 1, ttf.end);
+  tl.addEventListener('pointerdown', e => { if (B.playing) stop(); const [mx, my] = tpos(e); tl.setPointerCapture(e.pointerId); note = '';
+    let k = -1, bd = 10 * ttf.dpr; if (Math.abs(my - ttf.ky) < 14 * ttf.dpr) B.keys.forEach((q, i) => { const d = Math.abs(ttf.x0 + (q.frame - 1) * ttf.px - mx); if (d < bd) { bd = d; k = i; } });
+    if (k >= 0) { tdrag = { key: B.keys[k], moved: false }; B.cur = B.keys[k].frame; } else { tdrag = { scrub: true }; B.cur = tFrame(mx); } sync(true); });
+  tl.addEventListener('pointermove', e => {
+    if (!tdrag) return; const f = tFrame(tpos(e)[0]); if (tdrag.scrub) { if (f !== B.cur) { B.cur = f; sync(true); } return; }
+    const i = B.keys.indexOf(tdrag.key), nf = AT.clamp(f, i ? B.keys[i - 1].frame + 1 : 1, i < B.keys.length - 1 ? B.keys[i + 1].frame - 1 : 1e6);
+    if (nf !== tdrag.key.frame) { if (!tdrag.moved) { pushUndo(); tdrag.moved = true; } tdrag.key.frame = nf; B.cur = nf; sync(true); }
+  });
+  const tdrop = () => { if (!tdrag) return; const m = tdrag.moved; tdrag = null; if (m) sync(); };
+  tl.addEventListener('pointerup', tdrop); tl.addEventListener('pointercancel', tdrop);
+
+  window.addEventListener('keydown', e => {
+    if (!active() || /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) return; const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); doUndo(); }
+    else if (e.ctrlKey || e.metaKey || e.altKey) return;
+    else if (e.code === 'Space') { e.preventDefault(); B.playing ? stop() : play(); }
+    else if (k === 'arrowleft' || k === 'arrowright') { e.preventDefault(); const d = k === 'arrowleft' ? -1 : 1; if (e.shiftKey) jump(d); else { if (B.playing) stop(); B.cur = AT.clamp(Math.round(B.cur) + d, 1, ttf ? ttf.end : last()); note = ''; sync(true); } }
+    else if (k === 'k') $('#bAdd').click(); else if (k === 'o') $('#bOnion').click(); else if (k === 'delete') $('#bDel').click();
+  });
+  window.addEventListener('resize', () => { if (active()) { draw(); drawTime(); } });
+  try { const o = JSON.parse(localStorage.getItem(KEY) || 'null'); if (o && loadMotion(o.motion) && o.ui) for (const n of ['loop', 'onion', 'ik', 'plant']) if (typeof o.ui[n] === 'boolean') B[n] = o.ui[n];
+    if (o && o.ui) { if (o.ui.onionMode === 'frames') B.onionMode = 'frames'; if ([1, 2, 3].includes(o.ui.onionN)) B.onionN = o.ui.onionN; } } catch (e) {}
+  if (!B.keys.length) B.keys = starter();
+  sync(true);
+  const at = n => { const p = scr(M.fk(pose()).J[n]), r = view.getBoundingClientRect(); return [r.left + p[0] / tf.dpr, r.top + p[1] / tf.dpr]; };          // where a joint is on the page (for the tests)
+  const frameAt = f => { const r = tl.getBoundingClientRect(); return [r.left + (ttf.x0 + (f - 1) * ttf.px) / ttf.dpr, r.top + ttf.ky / ttf.dpr]; };
+  return { B, pose, at, frameAt, ghosts, motionJSON, loadMotion, starter, sync, play, stop, isCycle: cycle };
 })();
 </script>
 </body>
