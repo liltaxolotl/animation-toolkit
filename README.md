@@ -77,20 +77,40 @@ A key can carry its drawing so keys can be lined up by eye. Exports the table as
 figure; click any patch to flip it between black and white. Painted frames: darker than a cutoff. Transparent
 backgrounds: used directly. Grayscale can be squashed to 2 to 5 values. Flip, stack, and full-size PNG export.
 
-**Body.** A posable side-view mannequin for body mechanics (being built in phases; phase 1 is in: the mannequin, its
-timeline, onion skin and the timing slider). Joints: neck, spine, hips, and both shoulders, elbows, wrists, knees and
-ankles. Drag a body part to swing it from its joint, drag a wrist or ankle dot to pull the whole limb, drag the hip
-diamond to move the body (the feet stay planted). Click a dot to pick a joint and bend it with the slider. The timeline
-holds key poses (pink diamonds): click or drag to scrub, drag a diamond to move a key, and posing on a frame with no key
-makes one. Onion skin shows the neighbouring key poses or nearby frames, blue before and orange after. The speed slider
-plays the motion faster or slower and shows where the keys would land; "Keep this timing" moves them there. Saves and
-opens a motion file, and saves the current frame as a PNG.
+**Body.** A posable side-view mannequin for body mechanics (being built in phases; 1 to 3 are in: the mannequin with
+its timeline, onion skin and timing slider; preset motions; teaching overlays).
+
+- Posing. Joints: neck, spine, hips, and both shoulders, elbows, wrists, knees and ankles. Drag a body part to swing it
+  from its joint, drag a wrist or ankle dot to pull the whole limb, drag the hip diamond to move the body (the feet stay
+  planted). Click a dot to pick a joint and bend it with the slider.
+- Timeline. Every stored pose shows as a little figure with its name and a mark: red diamond = key pose, blue diamond =
+  breakdown, green dot = inbetween (the Timing tab's colours). Click or drag to scrub, drag a mark to move that pose,
+  and posing on a frame with no mark makes a new key pose. The top left of the picture names the pose you are on, or
+  says which two poses an inbetween frame sits between. A foot that is on the ground in two neighbouring poses stays on
+  the ground on the frames between them.
+- Motions to study: walk cycle (contact, down, passing, up; 12 frames a step, walking on the spot), pick something up
+  (anticipation, hips back, grab, legs push, settle), raise a hand (anticipation, elbow leads, overshoot, settle), and a
+  crouch-and-stretch to practise on. Each says under the buttons what it teaches.
+- Onion skin: the neighbouring stored poses or nearby frames, blue before and orange after.
+- Timing: the speed slider plays the motion faster or slower and shows where the poses would land; "Keep this timing"
+  moves them there.
+- Overlays (tick boxes beside Play): **Line of action** draws one gold curve from the head (or a hand reaching above
+  it) down the spine and out through a leg, and says straight, C curve or S curve. **Balance** shows the centre of
+  gravity, a plumb line under it and the stretch of ground the feet cover: green = over the feet, orange = only just,
+  red = tipping, with the direction. **Pivots** marks every joint, a wedge for how far it is bent from rest, and the
+  arc the selected joint swings on.
+- Saves and opens a motion file, and saves the current frame as a PNG.
 
 A motion file is small enough to write by hand, so you can author a motion for the artist and have her open it:
 
-    {"kind": "animtk-body-motion", "version": 1, "fps": 24, "keys": [
-      {"frame": 1,  "ease": "inout", "label": "", "pose": {"x": 0, "y": 3.89, "shoulderR": 8, "elbowR": 12}},
-      {"frame": 13, "ease": "out",   "label": "", "pose": {"x": 0, "y": 3.89, "shoulderR": 150, "elbowR": 40}}]}
+    {"kind": "animtk-body-motion", "version": 1, "fps": 24, "name": "Wave", "about": "One line on what it teaches.",
+     "keys": [
+      {"frame": 1,  "kind": "key",       "label": "Stand",       "ease": "inout", "pose": {"shoulderR": 8, "elbowR": 12}},
+      {"frame": 9,  "kind": "breakdown", "label": "Elbow leads", "ease": "linear", "pose": {"shoulderR": 82, "elbowR": 118}},
+      {"frame": 15, "kind": "key",       "label": "Hand up",     "ease": "inout", "pose": {"shoulderR": 150, "elbowR": 22}}]}
+
+`kind` is `key`, `breakdown` or `inbetween`. An optional `"prop": {"x": 1.6, "y": 0.3, "r": 0.3, "grab": 24, "hand":
+"R"}` draws a ball that rests at x, y and travels with that hand from the grab frame on.
 
 Pose fields: `x`, `y` (hips, in head heights, ground at 0, standing hips at about 3.89), then angles in degrees:
 `lean`, `spine`, `neck`, and `shoulder`, `elbow`, `wrist`, `hip`, `knee`, `ankle` each with `R` (near side) or `L` (far
@@ -287,7 +307,7 @@ None of them need artwork: they generate their own stand-ins into `tests/out/`.
     node tests/test_app_ui.mjs           # Perspective mode in headless Chrome
     node tests/test_app_timing.mjs       # Timing mode
     node tests/test_app_camera.mjs       # Camera and Value modes, and their math against Python
-    node tests/test_app_body.mjs         # Body mode: mannequin math, posing, timeline, onion skin, timing
+    node tests/test_app_body.mjs         # Body mode: mannequin math, presets, balance, posing, timeline, overlays
 
 The four browser tests need `npm i puppeteer-core` (it drives the Chrome or Edge already installed).
 
@@ -300,7 +320,10 @@ The four browser tests need `npm i puppeteer-core` (it drives the Chrome or Edge
 - Silhouette of line art: which closed shapes are "figure" is a guess when the figure leaves the frame; check the picture.
 - Anatomy: depends entirely on where the joints were placed. Foreshortening explains many flags.
 - Body mode: a flat side view. It cannot turn to face the camera, and the far arm hides behind the torso when it hangs
-  (grab its dots). Joints bend as far as you drag them: nothing warns about impossible angles yet.
+  (grab its dots). Joints bend as far as you drag them: nothing warns about impossible angles yet. Balance uses average
+  adult body weights, ignores anything being carried, and only knows front and back. In a walk it honestly reads "tipping"
+  for much of each step, because walking is falling and catching. The line of action is a fitted curve: a guide to
+  compare poses with, not a judgement.
 - Lip sync: English recognition by default; a computer cannot hear acting, so treat the result as a first pass to adjust.
 - Tracker: a save through this tool rebuilds charts (they can lose styling) and drops drawn shapes, text boxes,
   slicers and sparklines. It warns when the workbook has any, and refuses `--in-place` without `--force`.

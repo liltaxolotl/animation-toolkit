@@ -331,21 +331,29 @@ input[type=number],input[type=text],select{width:100%;background:var(--bg);color
 <!-- ============================== BODY MODE ============================== -->
 <section class="mode" id="mode-body">
   <div class="stage" id="bStage" style="display:flex;flex-direction:column">
-    <div style="flex:1;position:relative;min-height:0"><canvas id="bView"></canvas><div class="readout" id="bReadout"></div>
-      <div class="hint" id="bHint">Drag a body part to swing it from its joint. Drag a wrist or ankle dot to pull the whole arm or leg. Drag the hip diamond to move the body. Scroll to zoom.</div></div>
-    <div style="height:118px;border-top:1px solid var(--line);flex:none;display:flex;flex-direction:column;background:var(--bg)">
+    <div style="flex:1;position:relative;min-height:0"><canvas id="bView"></canvas><div class="readout" id="bReadout"></div><div id="bPoseLbl" style="position:absolute;left:14px;top:10px;pointer-events:none;text-shadow:0 1px 3px #000"></div>
+      <div class="hint" id="bHint">Drag a body part to swing it from its joint. Drag a wrist or ankle dot to pull the whole arm or leg. Drag the hip diamond to move the body. Scroll to zoom. Space plays.</div></div>
+    <div style="height:190px;border-top:1px solid var(--line);flex:none;display:flex;flex-direction:column;background:var(--bg)">
       <div class="row" style="padding:4px 10px;margin:0;flex-wrap:nowrap"><button class="primary" id="bPlay" style="width:70px">Play</button><button id="bPrevK" title="Jump to the key pose before this frame">&lt; key</button><button id="bNextK" title="Jump to the key pose after this frame">key &gt;</button>
-        <label class="chk" style="margin:0 8px;flex:none"><input type="checkbox" id="bLoop" checked>Loop</label><label class="chk" style="margin:0 8px;flex:none"><input type="checkbox" id="bOnion">Onion skin</label><b id="bFrameLbl" style="margin-left:auto;text-align:right"></b></div>
+        <label class="chk" style="margin:0 8px;flex:none"><input type="checkbox" id="bLoop" checked>Loop</label><label class="chk" style="margin:0 8px;flex:none"><input type="checkbox" id="bOnion">Onion skin</label><span style="width:1px;height:18px;background:var(--line);flex:none"></span>
+        <label class="chk" style="margin:0 8px;flex:none"><input type="checkbox" id="bShowAction">Line of action</label><label class="chk" style="margin:0 8px;flex:none"><input type="checkbox" id="bShowBalance">Balance</label><label class="chk" style="margin:0 8px;flex:none"><input type="checkbox" id="bShowPivots">Pivots</label><b id="bFrameLbl" style="margin-left:auto;text-align:right"></b></div>
       <div style="flex:1;position:relative;min-height:0"><canvas id="bTime"></canvas></div>
     </div>
   </div>
   <div class="side">
     <div class="card">
-      <h2>Key poses</h2>
-      <div class="row"><button class="primary" id="bAdd" style="flex:1">Add key pose here</button><button id="bDel">Delete</button></div>
+      <h2>Motions to study</h2>
+      <div class="grid2"><button id="bWalk">Walk cycle</button><button id="bPick">Pick something up</button><button id="bRaise">Raise a hand</button><button id="bDemo">Crouch and stretch</button></div>
+      <div class="muted" id="bAbout" style="margin-top:6px"></div>
+    </div>
+    <div class="card">
+      <h2>Poses on the timeline</h2>
+      <div class="row"><button class="primary" id="bAdd" style="flex:1">Add a pose here</button><button id="bDel">Delete</button></div>
+      <div class="f2"><label>Name</label><input type="text" id="bKL" maxlength="24" placeholder="for example Contact"></div>
+      <div class="f2"><label>Type</label><select id="bKK"><option value="key">key pose</option><option value="breakdown">breakdown</option><option value="inbetween">inbetween</option></select></div>
       <div class="f2"><label>Frame</label><input type="number" id="bKF" min="1" step="1"></div>
       <div class="f2"><label>Leaves</label><select id="bKE"><option value="inout">slow out, slow in</option><option value="in">slow out (speeds up)</option><option value="out">slow in (settles)</option><option value="linear">even speed</option></select></div>
-      <div class="muted">Pink diamonds on the timeline are key poses. Drag one sideways to change when it happens. Moving a joint on a frame with no key makes a new key pose there.</div>
+      <div class="muted"><span class="dot" style="background:#ff5560"></span>key <span class="dot" style="background:#4d8dff;margin-left:6px"></span>breakdown <span class="dot" style="background:#2fbf71;margin-left:6px"></span>inbetween<br>Drag a mark on the timeline sideways to change when that pose happens. Moving a joint on a frame with no mark makes a new key pose there.</div>
     </div>
     <div class="card">
       <h2>Timing</h2>
@@ -370,7 +378,6 @@ input[type=number],input[type=text],select{width:100%;background:var(--bg);color
       <label class="chk"><input type="checkbox" id="bIK" checked>A wrist or ankle pulls the whole limb</label>
       <label class="chk"><input type="checkbox" id="bPlant" checked>Feet stay put when the hips move</label>
       <div class="row"><button id="bStand" style="flex:1">Standing pose</button><button id="bUndo" style="flex:1">Undo</button></div>
-      <button id="bDemo" style="width:100%">Load the starter motion</button>
     </div>
     <div class="card">
       <h2>Save</h2>
@@ -761,16 +768,112 @@ const BodyMath = (() => {
   function poseAt(keys, f, P) {                       // keys sorted by frame; the first and last pose hold outside the motion
     const n = keys.length - 1; if (f <= keys[0].frame) return Object.assign({}, keys[0].pose); if (f >= keys[n].frame) return Object.assign({}, keys[n].pose);
     let i = 0; while (keys[i + 1].frame <= f) i++; const a = keys[i], b = keys[i + 1];
-    let q = mix(a.pose, b.pose, ease((f - a.frame) / (b.frame - a.frame), a.ease));
-    const fa = fk(a.pose, P), fb = fk(b.pose, P);     // a foot that is on the same spot in both key poses stays on it in between
-    for (const s of SIDES) { const u = fa.J['ankle' + s], v = fb.J['ankle' + s], w = fa.W['foot' + s];
-      if (Math.hypot(u[0] - v[0], u[1] - v[1]) < 0.02 && Math.abs(near(fb.W['foot' + s], w) - w) < 1) q = pullLeg(q, s, u, P, w); }
+    const t = ease((f - a.frame) / (b.frame - a.frame), a.ease), fa = fk(a.pose, P), fb = fk(b.pose, P); let q = mix(a.pose, b.pose, t);
+    for (const s of SIDES) if (touching(fa.J, s) && touching(fb.J, s)) {      // a foot on the ground in both key poses stays on the ground in between
+      const u = fa.J['ankle' + s], v = fb.J['ankle' + s], w = fa.W['foot' + s], w2 = near(fb.W['foot' + s], w);
+      q = pullLeg(q, s, [u[0] + (v[0] - u[0]) * t, u[1] + (v[1] - u[1]) * t], P, w + (w2 - w) * t); }
     return q;
   }
+  const touching = (J, s) => Math.abs(Math.min(J['heel' + s][1], J['toe' + s][1])) < 0.05;
   function retime(frames, speed) {                    // 2 = twice as fast = half the frames; keys never land on the same frame
     const out = []; frames.forEach((f, i) => { let v = frames[0] + Math.round((f - frames[0]) / speed); if (i && v <= out[i - 1]) v = out[i - 1] + 1; out.push(v); }); return out;
   }
-  return { PROPS, ANGLES, FIELDS, dir, ang, near, ease, fk, lowest, stand, clean, reach, pullArm, pullLeg, moveHips, leanTo, mix, poseAt, retime };
+
+  // ---------- balance: where the weight is and what holds it up
+  const MASS = { head: 0.08, chest: 0.28, waist: 0.22, upperArm: 0.028, forearm: 0.016, hand: 0.006, thigh: 0.1, shin: 0.0465, foot: 0.0145 };
+  function com(p, P) {                                // centre of gravity: every body part weighed by its share of the body
+    const J = fk(p, P).J, parts = [[J.neck, J.head, 0.62, MASS.head], [J.spine, J.neck, 0.5, MASS.chest], [J.pelvis, J.spine, 0.5, MASS.waist]];
+    for (const s of SIDES) parts.push([J['shoulder' + s], J['elbow' + s], 0.436, MASS.upperArm], [J['elbow' + s], J['wrist' + s], 0.43, MASS.forearm], [J['wrist' + s], J['hand' + s], 0.5, MASS.hand],
+      [J.pelvis, J['knee' + s], 0.433, MASS.thigh], [J['knee' + s], J['ankle' + s], 0.433, MASS.shin], [J['heel' + s], J['toe' + s], 0.45, MASS.foot]);
+    let x = 0, y = 0, m = 0; for (const [a, b, k, w] of parts) { x += (a[0] + (b[0] - a[0]) * k) * w; y += (a[1] + (b[1] - a[1]) * k) * w; m += w; } return [x / m, y / m];
+  }
+  function support(p, P) {                            // the stretch of ground the feet cover: [back edge, front edge], or null in the air
+    const J = fk(p, P).J; let lo = Infinity, hi = -Infinity;
+    for (const s of SIDES) { const h = J['heel' + s], t = J['toe' + s], hd = Math.abs(h[1]) < 0.05, td = Math.abs(t[1]) < 0.05; if (!hd && !td) continue;
+      const a = hd ? h[0] : t[0] - 0.25, b = td ? t[0] : h[0] + 0.2; lo = Math.min(lo, a, b); hi = Math.max(hi, a, b); }
+    return lo > hi ? null : [lo, hi];
+  }
+  function balance(p, P) {                            // state: balanced / forward / back (tipping that way) / air. edge = how far inside the nearest edge
+    const c = com(p, P), sp = support(p, P); if (!sp) return { com: c, support: null, state: 'air', off: 0, edge: 0, side: '' };
+    const off = c[0] < sp[0] ? c[0] - sp[0] : c[0] > sp[1] ? c[0] - sp[1] : 0;
+    return { com: c, support: sp, state: off > 0 ? 'forward' : off < 0 ? 'back' : 'balanced', off, edge: Math.min(c[0] - sp[0], sp[1] - c[0]), side: c[0] - sp[0] < sp[1] - c[0] ? 'back' : 'front' };
+  }
+
+  // ---------- line of action: one simple curve through the whole pose
+  function bezFit(Q) {                                // the cubic curve from the first point to the last that passes closest to the ones between
+    const n = Q.length, t = [0]; for (let i = 1; i < n; i++) t.push(t[i - 1] + Math.hypot(Q[i][0] - Q[i - 1][0], Q[i][1] - Q[i - 1][1]));
+    const L = t[n - 1] || 1, A = Q[0], Z = Q[n - 1]; let a11 = 0, a12 = 0, a22 = 0; const r1 = [0, 0], r2 = [0, 0];
+    for (let i = 1; i < n - 1; i++) { const u = t[i] / L, v = 1 - u, b0 = v * v * v, b1 = 3 * v * v * u, b2 = 3 * v * u * u, b3 = u * u * u; a11 += b1 * b1; a12 += b1 * b2; a22 += b2 * b2;
+      for (const k of [0, 1]) { const d = Q[i][k] - b0 * A[k] - b3 * Z[k]; r1[k] += b1 * d; r2[k] += b2 * d; } }
+    const det = a11 * a22 - a12 * a12; if (Math.abs(det) < 1e-9) return [A, [A[0] + (Z[0] - A[0]) / 3, A[1] + (Z[1] - A[1]) / 3], [A[0] + (Z[0] - A[0]) * 2 / 3, A[1] + (Z[1] - A[1]) * 2 / 3], Z];
+    return [A, [0, 1].map(k => (r1[k] * a22 - r2[k] * a12) / det), [0, 1].map(k => (a11 * r2[k] - a12 * r1[k]) / det), Z];
+  }
+  function actionLine(p, P) {                         // from the head (or a hand reaching above it) down the spine and out through a leg
+    const J = fk(p, P).J; let top = 'head'; for (const s of SIDES) if (J['hand' + s][1] > J[top][1] + 0.3 && J['hand' + s][1] > J.neck[1] + 0.8) top = 'hand' + s;
+    let leg = '', best = -1e9; const down = SIDES.filter(s => touching(J, s)), fwd = J[top][0] >= J.pelvis[0] ? 1 : -1;       // the leg on the ground that carries the lean on: the back leg under a forward lean
+    for (const s of down.length ? down : SIDES) { const a = J['ankle' + s], d = Math.hypot(J[top][0] - a[0], J[top][1] - a[1]) + 0.6 * fwd * (J.pelvis[0] - a[0]); if (d > best) { best = d; leg = s; } }
+    const k = J['knee' + leg], a = J['ankle' + leg], mid = [(k[0] * 2 + J.pelvis[0] + a[0]) / 4, (k[1] * 2 + J.pelvis[1] + a[1]) / 4];
+    const pts = (top === 'head' ? [J.head, J.neck] : [J[top], J['elbow' + top.slice(-1)], J.neck]).concat([J.spine, J.pelvis, mid, a]), bez = bezFit(pts);
+    const cx = bez[3][0] - bez[0][0], cy = bez[3][1] - bez[0][1], L = Math.hypot(cx, cy) || 1, off = c => ((c[0] - bez[0][0]) * -cy + (c[1] - bez[0][1]) * cx) / (L * L), d1 = off(bez[1]), d2 = off(bez[2]);
+    const bend = Math.max(Math.abs(d1), Math.abs(d2)), shape = bend < 0.05 ? 'straight' : d1 * d2 < 0 && Math.min(Math.abs(d1), Math.abs(d2)) > 0.05 ? 'S' : 'C';
+    return { top, leg, pts, bez, bend, shape };
+  }
+
+  // ---------- motions to study, planned the way an animator would: keys first, then breakdowns, then inbetweens
+  const swap = p => { const q = Object.assign({}, p); for (const n of ['shoulder', 'elbow', 'wrist', 'hip', 'knee', 'ankle']) { q[n + 'R'] = p[n + 'L']; q[n + 'L'] = p[n + 'R']; } return q; };
+  function ankleOn(x, w, by, P) {                     // where the ankle is when the foot points along w (90 = level) and its heel or toe touches the ground at x
+    P = P || PROPS; if (by === 'flat') return [x, P.ankleH]; const al = dir(w), dn = dir(w - 90), u = by === 'toe' ? -P.foot : P.heel;
+    return [x - dn[0] * P.ankleH + al[0] * u, -dn[1] * P.ankleH + al[1] * u];
+  }
+  function posed(o, P) {                              // a pose from a short description: hips, torso, arms as [shoulder, elbow, wrist], legs as [ankle spot, foot direction]
+    let p = Object.assign(stand(P), { x: o.x || 0, y: o.y, lean: o.lean || 0, spine: o.spine || 0, neck: o.neck || 0 });
+    for (const s of SIDES) { const a = o['arm' + s]; if (a) { p['shoulder' + s] = a[0]; p['elbow' + s] = a[1]; p['wrist' + s] = a[2] || 0; } }
+    for (const s of SIDES) { const l = o['leg' + s]; if (l) p = pullLeg(p, s, l[0], P, l[1]); if (o['reach' + s]) p = pullArm(p, s, o['reach' + s], P); }
+    return p;
+  }
+  const K = (frame, kind, label, ease, pose) => ({ frame, kind, label, ease, pose });
+  function walk(P) {                                  // 12 frames a step, walking on the spot: the planted foot slides back at an even speed
+    P = P || PROPS; const front = [ankleOn(1.1, 112, 'heel', P), 112], back = [ankleOn(-0.85, 68, 'toe', P), 68], step = (front[0][0] - back[0][0]) / 12;
+    const sup = f => front[0][0] - step * (f - 1), lift = ankleOn(0, 76, 'toe', P)[1];
+    const c = posed({ y: 3.74, lean: 4, armR: [-26, 14], armL: [28, 30], legR: front, legL: back }, P);
+    const dn = posed({ y: 3.6, lean: 6, spine: 2, armR: [-32, 16], armL: [34, 34], legR: [[sup(4), P.ankleH], 90], legL: [[-1.3, 1.02], 54] }, P);
+    const ps = posed({ y: 3.87, lean: 4, armR: [-4, 14], armL: [6, 18], legR: [[sup(7), P.ankleH], 90], legL: [[0.05, 0.8], 72] }, P);
+    const up = posed({ y: 3.96, lean: 3, spine: -1, armR: [18, 24], armL: [-16, 14], legR: [[sup(10), lift], 76], legL: [[0.95, 0.8], 100] }, P);
+    const half = [[c, 'key', 'Contact'], [dn, 'inbetween', 'Down'], [ps, 'breakdown', 'Passing'], [up, 'inbetween', 'Up']], keys = [];
+    for (let i = 0; i < 8; i++) { const h = half[i % 4]; keys.push(K(1 + i * 3, h[1], h[2], 'linear', i < 4 ? h[0] : swap(h[0]))); }
+    keys.push(K(25, 'key', 'Contact', 'linear', Object.assign({}, c)));
+    return { name: 'Walk cycle', keys, prop: null, about: 'The two contact poses are the keys. Passing is the breakdown between them. Down and up are the inbetweens that give the walk its bounce: lowest just after contact, highest just after passing.' };
+  }
+  function pickUp(P) {                                // bend the knees, hips back, grab, legs push back up
+    P = P || PROPS; const s0 = stand(P), J = fk(s0, P).J, legs = { legR: [J.ankleR, 90], legL: [J.ankleL, 90] }, mk = o => posed(Object.assign({}, legs, o), P), ball = { r: 0.3, x: 1.6, y: 0.3 };
+    const antic = mk({ x: -0.05, y: s0.y - 0.02, lean: -3, spine: -2, neck: 18, armR: [-8, 14], armL: [-14, 12] });
+    const bend = mk({ x: -0.3, y: 3.15, lean: 30, spine: 10, neck: 14, armR: [40, 24], armL: [22, 28] });
+    const grab = mk({ x: -0.45, y: 1.95, lean: 48, spine: 18, neck: -4, reachR: [ball.x - 0.32, ball.y + 0.55], reachL: [ball.x - 0.5, ball.y + 0.42] });
+    const push = mk({ x: -0.25, y: 3.0, lean: 26, spine: 8, neck: 2, armR: [30, 62], armL: [22, 72] });
+    const settle = mk({ x: 0.03, y: s0.y - 0.01, lean: -3, spine: -2, neck: 6, armR: [22, 102], armL: [15, 108] });
+    const hold = mk({ y: s0.y - 0.01, neck: 4, armR: [24, 92], armL: [18, 98] });
+    return { name: 'Pick something up', about: 'Stand, grab and holding it are the keys. The breakdowns show how it gets there: hips go back on the way down, legs push on the way up. A small anticipation starts it and a settle ends it.', prop: Object.assign({ grab: 24, hand: 'R' }, ball), keys: [K(1, 'key', 'Stand', 'inout', s0), K(6, 'inbetween', 'Anticipation', 'in', antic), K(14, 'breakdown', 'Hips back', 'linear', bend),
+      K(24, 'key', 'Grab', 'linear', grab), K(30, 'key', 'Grip', 'in', Object.assign({}, grab)), K(40, 'breakdown', 'Legs push', 'out', push), K(48, 'inbetween', 'Settle', 'inout', settle), K(54, 'key', 'Holding it', 'inout', hold)] };
+  }
+  function raiseHand(P) {                             // a small dip the other way first, the elbow leads, the hand overshoots and settles
+    P = P || PROPS; const s0 = stand(P), J = fk(s0, P).J, legs = { legR: [J.ankleR, 90], legL: [J.ankleL, 90] }, mk = o => posed(Object.assign({ y: s0.y }, legs, o), P);
+    const antic = mk({ y: s0.y - 0.05, lean: 1, spine: 3, neck: 4, armR: [-16, 22, 8], armL: [-6, 12] }), lead = mk({ spine: -2, neck: -3, armR: [82, 118, -30], armL: [-10, 13] });
+    const over = mk({ spine: -6, neck: -9, armR: [166, 5, 22], armL: [-13, 14] }), up = mk({ spine: -3, neck: -6, armR: [150, 22, 8], armL: [-9, 12] });
+    return { name: 'Raise a hand', about: 'Stand and hand up are the keys. In the breakdown the elbow leads and the hand drags behind. The anticipation dips the other way first, then the hand overshoots and settles back.', prop: null, keys: [K(1, 'key', 'Stand', 'inout', s0), K(5, 'inbetween', 'Anticipation', 'in', antic), K(11, 'breakdown', 'Elbow leads', 'linear', lead),
+      K(17, 'inbetween', 'Overshoot', 'inout', over), K(22, 'key', 'Hand up', 'inout', up), K(34, 'key', 'Hold', 'inout', Object.assign({}, up))] };
+  }
+  function starter(P) {                               // crouch, stretch up, settle
+    const a = stand(P); let c = leanTo(moveHips(a, -0.35, a.y - 1.0, true, P), 30); c = Object.assign(c, { spine: 14, neck: -14, shoulderR: -38, elbowR: 30, shoulderL: -54, elbowL: 24 });
+    const u = Object.assign({}, a, { spine: -7, neck: -16, shoulderR: 170, elbowR: 8, shoulderL: 156, elbowL: 12 });
+    return { name: 'Crouch and stretch', about: 'Three key poses to practise on: drag the joints, slide the marks on the timeline, try the speed slider.', prop: null, keys: [K(1, 'key', 'Stand', 'inout', a), K(13, 'key', 'Crouch', 'inout', c), K(21, 'key', 'Stretch', 'out', u), K(37, 'key', 'Settle', 'inout', stand(P))] };
+  }
+  function propAt(prop, keys, f, P) {                 // where the thing being picked up is: on its spot until the grab frame, then it goes with the hand
+    if (!prop.grab || f < prop.grab) return [prop.x, prop.y]; const h = prop.hand === 'L' ? 'L' : 'R', mid = q => { const J = fk(q, P).J; return [(J['wrist' + h][0] + J['hand' + h][0]) / 2, (J['wrist' + h][1] + J['hand' + h][1]) / 2]; };
+    const g = mid(poseAt(keys, prop.grab, P)), m = mid(poseAt(keys, f, P)); return [prop.x + m[0] - g[0], prop.y + m[1] - g[1]];
+  }
+  const KINDS = ['key', 'breakdown', 'inbetween'], presets = { walk, pickUp, raiseHand, starter };
+  return { PROPS, ANGLES, FIELDS, KINDS, dir, ang, near, ease, fk, lowest, stand, clean, reach, pullArm, pullLeg, moveHips, leanTo, mix, poseAt, retime,
+    com, support, balance, bezFit, actionLine, swap, ankleOn, posed, presets, propAt };
 })();
 /*BODY-END*/
 </script>
@@ -1701,10 +1804,11 @@ const Value = (() => {
 // ============================== BODY MODE ==============================
 const Body = (() => {
   const M = BodyMath, P = M.PROPS, KEY = 'animtk-body', FPS = 24, SIDES = ['R', 'L'], EASES = ['inout', 'in', 'out', 'linear'];
-  const B = { keys: [], cur: 1, sel: 'elbowR', playing: false, loop: true, onion: false, onionMode: 'keys', onionN: 1, speed: 1, ik: true, plant: true, zoom: 1, cx: 0, cy: 4.5 };
+  const B = { keys: [], cur: 1, sel: 'elbowR', playing: false, loop: true, onion: false, onionMode: 'keys', onionN: 1, speed: 1, ik: true, plant: true, zoom: 1, cx: 0, cy: 4.5, name: '', about: '', prop: null, action: false, balance: false, pivots: false };
   const view = $('#bView'), ctx = view.getContext('2d'), tl = $('#bTime'), tctx = tl.getContext('2d');
   const active = () => $('#mode-body').classList.contains('on');
-  const OUT = '#0e0d11', NEAR = '#ece8f4', MID = '#cbc5d8', FAR = '#7f7a90', BEFORE = '#4d8dff', AFTER = '#ffa23a', ACC = '#ff8fb8';
+  const OUT = '#0e0d11', NEAR = '#ece8f4', MID = '#cbc5d8', FAR = '#7f7a90', BEFORE = '#4d8dff', AFTER = '#ffa23a', ACC = '#ff8fb8', GOLD = '#ffd84d', GREEN = '#2fbf71', RED = '#ff5560', CYAN = '#58d6e8', BALL = '#3cc7b4';
+  const KCOL = { key: '#ff5560', breakdown: '#4d8dff', inbetween: '#2fbf71' }, KNAME = { key: 'key pose', breakdown: 'breakdown', inbetween: 'inbetween' };       // same colours as the Timing tab
   let tf = null, ttf = null, drag = null, tdrag = null, raf = 0, undo = [], note = '', sliding = false;
 
   // which angle each joint owns, where it pivots, and which way a drag turns it
@@ -1723,6 +1827,8 @@ const Body = (() => {
   const DOTS = [...armDots('R'), 'shoulderR', ...legDots('R'), 'head', 'neck', 'spine', 'pelvis', ...legDots('L'), ...armDots('L')];     // front first
   const armBones = s => [['shoulder' + s, 'elbow' + s, 0.32, 'shoulder' + s], ['elbow' + s, 'wrist' + s, 0.27, 'elbow' + s], ['wrist' + s, 'hand' + s, 0.2, 'wrist' + s]];
   const legBones = s => [['pelvis', 'knee' + s, 0.46, 'hip' + s], ['knee' + s, 'ankle' + s, 0.34, 'knee' + s], ['ankle' + s, 'toe' + s, 0.3, 'ankle' + s], ['ankle' + s, 'heel' + s, 0.3, 'ankle' + s]];
+  const BONE = { lean: ['waist', P.waist], spine: ['chest', P.chest], neck: ['head', P.neck + P.head] };       // the bone each joint turns, and its length
+  for (const s of SIDES) Object.assign(BONE, { ['shoulder' + s]: ['upperArm' + s, P.upperArm], ['elbow' + s]: ['forearm' + s, P.forearm], ['wrist' + s]: ['hand' + s, P.hand], ['hip' + s]: ['thigh' + s, P.thigh], ['knee' + s]: ['shin' + s, P.shin], ['ankle' + s]: ['foot' + s, P.foot] });
   const BONES = [...armBones('R'), ...legBones('R'), ['neck', 'head', 0.8, 'neck'], ['spine', 'neck', 1.0, 'spine'], ['pelvis', 'spine', 0.95, 'lean'], ...legBones('L'), ...armBones('L')];
 
   // ---------- key poses
@@ -1731,28 +1837,25 @@ const Body = (() => {
   const keyAt = f => B.keys.findIndex(k => k.frame === Math.round(f));
   const pose = f => M.poseAt(B.keys, f == null ? B.cur : f);
   const cycle = () => { const a = B.keys[0].pose, b = B.keys[B.keys.length - 1].pose; return B.keys.length > 2 && M.FIELDS.every(k => Math.abs(a[k] - b[k]) < 0.01); };
-  function pushUndo() { undo.push(JSON.stringify({ keys: B.keys, cur: Math.round(B.cur) })); if (undo.length > 60) undo.shift(); }
-  function doUndo() { const u = undo.pop(); if (!u) return; if (B.playing) stop(); const o = JSON.parse(u); B.keys = o.keys; B.cur = o.cur; note = 'Undone'; sync(); }
+  const snap = () => JSON.stringify({ keys: B.keys, cur: Math.round(B.cur), prop: B.prop, name: B.name, about: B.about });
+  function pushUndo() { undo.push(snap()); if (undo.length > 60) undo.shift(); }
+  function doUndo() { const u = undo.pop(); if (!u) return; if (B.playing) stop(); const o = JSON.parse(u); B.keys = o.keys; B.cur = o.cur; B.prop = o.prop || null; B.name = o.name || ''; B.about = o.about || ''; note = 'Undone'; sync(); }
   function ensureKey() {                               // the key pose on this frame, made from the inbetween if there was none
     const f = Math.round(B.cur); B.cur = f; const i = keyAt(f); if (i >= 0) return B.keys[i];
     let prev = null; for (const k of B.keys) if (k.frame < f) prev = k;
-    const k = { frame: f, ease: prev ? prev.ease : 'inout', label: '', pose: pose(f) }; B.keys.push(k); sortKeys(); note = 'New key pose at frame ' + f; return k;
+    const k = { frame: f, ease: prev ? prev.ease : 'inout', kind: 'key', label: '', pose: pose(f) }; B.keys.push(k); sortKeys(); note = 'New key pose at frame ' + f; return k;
   }
-  function starter() {                                 // crouch, stretch up, settle: something to scrub straight away
-    const a = M.stand(); let c = M.leanTo(M.moveHips(a, -0.35, a.y - 1.0, true), 30);
-    c = Object.assign(c, { spine: 14, neck: -14, shoulderR: -38, elbowR: 30, shoulderL: -54, elbowL: 24 });
-    const u = Object.assign({}, a, { spine: -7, neck: -16, shoulderR: 170, elbowR: 8, shoulderL: 156, elbowL: 12 });
-    return [{ frame: 1, ease: 'inout', label: '', pose: a }, { frame: 13, ease: 'inout', label: '', pose: c }, { frame: 21, ease: 'out', label: '', pose: u }, { frame: 37, ease: 'inout', label: '', pose: M.stand() }];
-  }
+  function loadPreset(id) { const m = M.presets[id](); B.keys = m.keys; B.prop = m.prop; B.name = m.name; B.about = m.about || ''; B.cur = B.keys[0].frame; B.speed = 1; }
   const r2 = v => Math.round(v * 100) / 100;
-  function motionJSON() { return { kind: 'animtk-body-motion', version: 1, fps: FPS, keys: B.keys.map(k => { const pose = {}; for (const n of M.FIELDS) pose[n] = r2(k.pose[n]); return { frame: k.frame, ease: k.ease, label: k.label || '', pose }; }) }; }
+  function motionJSON() { return { kind: 'animtk-body-motion', version: 1, fps: FPS, name: B.name, about: B.about, prop: B.prop, keys: B.keys.map(k => { const pose = {}; for (const n of M.FIELDS) pose[n] = r2(k.pose[n]); return { frame: k.frame, kind: k.kind, label: k.label || '', ease: k.ease, pose }; }) }; }
   function loadMotion(j) {
     if (!j || !Array.isArray(j.keys) || !j.keys.length) return false; const seen = {};
-    B.keys = j.keys.map(k => ({ frame: Math.max(1, Math.round(+k.frame) || 1), ease: EASES.includes(k.ease) ? k.ease : 'inout', label: k.label ? String(k.label) : '', pose: M.clean(k.pose) }))
+    B.keys = j.keys.map(k => ({ frame: Math.max(1, Math.round(+k.frame) || 1), ease: EASES.includes(k.ease) ? k.ease : 'inout', kind: M.KINDS.includes(k.kind) ? k.kind : 'key', label: k.label ? String(k.label).slice(0, 24) : '', pose: M.clean(k.pose) }))
       .sort((a, b) => a.frame - b.frame).filter(k => !seen[k.frame] && (seen[k.frame] = 1));
-    B.cur = B.keys[0].frame; B.speed = 1; return true;
+    const pr = j.prop; B.prop = pr && [pr.x, pr.y, pr.r].every(v => typeof v === 'number' && isFinite(v)) ? { x: pr.x, y: pr.y, r: pr.r, grab: Math.max(0, Math.round(+pr.grab) || 0), hand: pr.hand === 'L' ? 'L' : 'R' } : null;
+    B.name = j.name ? String(j.name).slice(0, 60) : ''; B.about = j.about ? String(j.about).slice(0, 400) : ''; B.cur = B.keys[0].frame; B.speed = 1; return true;
   }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify({ motion: motionJSON(), ui: { loop: B.loop, onion: B.onion, onionMode: B.onionMode, onionN: B.onionN, ik: B.ik, plant: B.plant } })); } catch (e) {} }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify({ motion: motionJSON(), ui: { loop: B.loop, onion: B.onion, onionMode: B.onionMode, onionN: B.onionN, ik: B.ik, plant: B.plant, action: B.action, balance: B.balance, pivots: B.pivots } })); } catch (e) {} }
 
   // ---------- the picture
   function fitCanvas(c) { const dpr = window.devicePixelRatio || 1, r = c.parentElement.getBoundingClientRect(), w = Math.round(r.width * dpr), h = Math.round(r.height * dpr); if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } return dpr; }
@@ -1777,9 +1880,9 @@ const Body = (() => {
     const eye = from('neck', W.head, k + 0.1, 0.2); g.beginPath(); g.arc(eye[0], eye[1], 0.045 * s, 0, 7); g.fillStyle = OUT; g.fill();
     leg('R', NEAR); arm('R', NEAR);
   }
-  function ghost(g, f, col, alpha) {
+  function ghost(g, f, col, alpha, lw) {
     const S = n => scr(f.J[n]), path = ns => { g.beginPath(); ns.forEach((n, i) => { const p = S(n); i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); }); g.stroke(); };
-    g.save(); g.globalAlpha = alpha; g.strokeStyle = col; g.lineWidth = 2.5 * tf.dpr; g.lineCap = g.lineJoin = 'round';
+    g.save(); g.globalAlpha = alpha; g.strokeStyle = col; g.lineWidth = (lw || 2.5) * tf.dpr; g.lineCap = g.lineJoin = 'round';
     path(['pelvis', 'spine', 'neck']); headShape(g, f); g.stroke();
     for (const s of SIDES) { path(['shoulder' + s, 'elbow' + s, 'wrist' + s, 'hand' + s]); path(['pelvis', 'knee' + s, 'ankle' + s, 'heel' + s, 'toe' + s, 'ankle' + s]); }
     g.restore();
@@ -1791,6 +1894,43 @@ const Body = (() => {
       B.keys.filter(k => k.frame > f + 1e-6).slice(0, n).forEach((k, i) => out.push({ frame: k.frame, side: 1, rank: i + 1 }));
     } else for (let i = 1; i <= n; i++) { if (f - 2 * i >= first()) out.push({ frame: f - 2 * i, side: -1, rank: i }); if (f + 2 * i <= last()) out.push({ frame: f + 2 * i, side: 1, rank: i }); }
     return out;
+  }
+  // ---------- teaching overlays
+  function drawPivots(g, f, p) {                       // every joint's pivot, a wedge for how far it is bent from rest, and the arc the selected one swings on
+    const dpr = tf.dpr, th = a => (90 - a) * Math.PI / 180; g.save(); g.lineCap = 'round';
+    for (const n of M.ANGLES.slice().reverse()) {
+      const [bone, len] = BONE[n], c = scr(f.J[ACT[n][0]]), cur = f.W[bone], v = AT.clamp(p[n], -359, 359), rest = cur - ACT[n][1] * v; g.globalAlpha = /L$/.test(n) ? 0.45 : 1;
+      if (Math.abs(v) > 1) { g.beginPath(); g.moveTo(c[0], c[1]); g.arc(c[0], c[1], 0.42 * tf.s, th(rest), th(cur), cur > rest); g.closePath(); g.fillStyle = 'rgba(88,214,232,.3)'; g.fill(); g.strokeStyle = CYAN; g.lineWidth = 1.5 * dpr; g.stroke(); }
+      if (n === B.sel) { g.setLineDash([6 * dpr, 6 * dpr]); g.beginPath(); g.arc(c[0], c[1], len * tf.s, 0, 7); g.strokeStyle = CYAN; g.lineWidth = 1.5 * dpr; g.stroke(); g.setLineDash([]); }
+      g.beginPath(); g.arc(c[0], c[1], 6 * dpr, 0, 7); g.moveTo(c[0] - 10 * dpr, c[1]); g.lineTo(c[0] + 10 * dpr, c[1]); g.moveTo(c[0], c[1] - 10 * dpr); g.lineTo(c[0], c[1] + 10 * dpr); g.strokeStyle = CYAN; g.lineWidth = 1.5 * dpr; g.stroke();
+    }
+    g.restore();
+  }
+  function drawAction(g, p) {
+    const b = M.actionLine(p).bez.map(scr), dpr = tf.dpr; g.save(); g.lineCap = 'round'; g.beginPath(); g.moveTo(b[0][0], b[0][1]); g.bezierCurveTo(b[1][0], b[1][1], b[2][0], b[2][1], b[3][0], b[3][1]);
+    g.strokeStyle = OUT; g.lineWidth = 9 * dpr; g.globalAlpha = 0.55; g.stroke(); g.globalAlpha = 0.95; g.strokeStyle = GOLD; g.lineWidth = 5 * dpr; g.stroke(); g.restore();
+  }
+  const balCol = b => b.state === 'air' ? '#a6a1b4' : b.state !== 'balanced' ? RED : b.edge < 0.12 ? AFTER : GREEN;
+  const balText = b => b.state === 'air' ? 'In the air' : b.state === 'forward' ? 'Off balance: tipping forward' : b.state === 'back' ? 'Off balance: tipping back' : b.edge < 0.12 ? 'Balanced, but only just (weight at the ' + b.side + ' edge of the feet)' : 'Balanced: the weight is over the feet';
+  function drawBalance(g, p) {                         // the centre of gravity, a plumb line down from it, and the ground the feet cover
+    const b = M.balance(p), dpr = tf.dpr, col = balCol(b), c = scr(b.com), gy = tf.oy, r = 11 * dpr; g.save(); g.lineCap = 'round';
+    if (b.support) { const a = scr([b.support[0], 0]), e = scr([b.support[1], 0]); g.beginPath(); g.moveTo(a[0], gy + 8 * dpr); g.lineTo(e[0], gy + 8 * dpr); g.strokeStyle = col; g.lineWidth = 7 * dpr; g.stroke(); }
+    g.setLineDash([5 * dpr, 6 * dpr]); g.beginPath(); g.moveTo(c[0], c[1]); g.lineTo(c[0], gy); g.strokeStyle = col; g.lineWidth = 2 * dpr; g.stroke(); g.setLineDash([]);
+    g.beginPath(); g.moveTo(c[0], gy + dpr); g.lineTo(c[0] - 7 * dpr, gy - 11 * dpr); g.lineTo(c[0] + 7 * dpr, gy - 11 * dpr); g.closePath(); g.fillStyle = col; g.fill();
+    g.beginPath(); g.arc(c[0], c[1], r, 0, 7); g.fillStyle = OUT; g.fill();
+    for (const q of [0, 2]) { g.beginPath(); g.moveTo(c[0], c[1]); g.arc(c[0], c[1], r, q * Math.PI / 2, (q + 1) * Math.PI / 2); g.closePath(); g.fillStyle = col; g.fill(); }
+    g.beginPath(); g.arc(c[0], c[1], r, 0, 7); g.strokeStyle = '#fff'; g.lineWidth = 2 * dpr; g.stroke(); g.restore();
+  }
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function poseLabel(p) {                              // top left of the picture: which pose this is, and what the overlays say about it
+    const f = Math.round(B.cur), i = keyAt(f), nm = k => k.label || 'frame ' + k.frame, row = (col, t) => '<div style="margin-top:5px;font-weight:600"><span class="dot" style="background:' + col + '"></span>' + esc(t) + '</div>'; let h = '';
+    if (i >= 0) { const k = B.keys[i]; h = '<div style="font-size:24px;font-weight:800;line-height:1.15">' + esc(k.label || 'Frame ' + k.frame) + '</div><span style="display:inline-block;margin-top:3px;padding:1px 9px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.6px;text-shadow:none;color:#0e0d11;background:' + KCOL[k.kind] + '">' + KNAME[k.kind].toUpperCase() + '</span>'; }
+    else if (f > first() && f < last()) { let a = B.keys[0]; for (const k of B.keys) if (k.frame < f) a = k; const b = B.keys[B.keys.indexOf(a) + 1];
+      h = '<div style="font-size:16px;font-weight:700;color:var(--dim)">inbetween</div><div class="muted">from ' + esc(nm(a)) + ' to ' + esc(nm(b)) + '</div>'; }
+    if (B.action) h += row(GOLD, 'Line of action: ' + ({ straight: 'straight (stiff)', C: 'a C curve', S: 'an S curve' })[M.actionLine(p).shape]);
+    if (B.balance) { const b = M.balance(p); h += row(balCol(b), balText(b)); }
+    if (B.pivots) h += row(CYAN, 'Pivots: each wedge shows how far that joint is bent from rest');
+    const el = $('#bPoseLbl'); if (el.innerHTML !== h) el.innerHTML = h;
   }
   function dots(g, f, p) {
     const dpr = tf.dpr;
@@ -1810,28 +1950,40 @@ const Body = (() => {
     const s = Math.min(h / 10.8, w / 9) * B.zoom; tf = { s, ox: w / 2 - B.cx * s, oy: h / 2 + B.cy * s, dpr };
     ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#17151d'; ctx.fillRect(0, tf.oy, w, Math.max(0, h - tf.oy)); ctx.fillStyle = '#3b3846'; ctx.fillRect(0, tf.oy, w, Math.max(1, dpr));
     if (B.onion) for (const gh of ghosts().reverse()) ghost(ctx, M.fk(pose(gh.frame)), gh.side < 0 ? BEFORE : AFTER, 0.85 / Math.pow(gh.rank, 0.8));
-    const p = pose(), f = M.fk(p); figure(ctx, f); if (!B.playing) dots(ctx, f, p);
+    const p = pose(), f = M.fk(p); figure(ctx, f);
+    if (B.prop) { const c = scr(M.propAt(B.prop, B.keys, B.cur)); ctx.beginPath(); ctx.arc(c[0], c[1], B.prop.r * s, 0, 7); ctx.fillStyle = BALL; ctx.fill(); ctx.strokeStyle = OUT; ctx.lineWidth = 2 * dpr; ctx.stroke(); }
+    if (B.pivots) drawPivots(ctx, f, p); if (B.action) drawAction(ctx, p); if (B.balance) drawBalance(ctx, p);
+    if (!B.playing) dots(ctx, f, p); poseLabel(p);
   }
   function drawTime() {
-    const dpr = fitCanvas(tl), w = tl.width, h = tl.height; if (!w || !h) return; const g = tctx, fr = B.keys.map(k => k.frame), rt = M.retime(fr, B.speed);
-    const end = Math.max(last() + 6, rt[rt.length - 1] + 3, 30), x0 = 24 * dpr, px = (w - 48 * dpr) / (end - 1), X = f => x0 + (f - 1) * px, ky = h * 0.33; ttf = { x0, px, end, dpr, ky };
-    g.clearRect(0, 0, w, h); g.fillStyle = 'rgba(255,143,184,.13)'; g.fillRect(X(first()), ky - 11 * dpr, X(last()) - X(first()), 22 * dpr);
+    const dpr = fitCanvas(tl), w = tl.width, h = tl.height; if (!w || !h) return; const g = tctx, fr = B.keys.map(k => k.frame), rt = M.retime(fr, B.speed), f0 = Math.round(B.cur);
+    const end = Math.max(last() + 6, rt[rt.length - 1] + 3, 30), x0 = 30 * dpr, px = (w - 60 * dpr) / (end - 1), X = f => x0 + (f - 1) * px, th = Math.max(20 * dpr, h - 84 * dpr), ky = th + 34 * dpr; ttf = { x0, px, end, dpr, ky };
+    g.clearRect(0, 0, w, h); g.font = '600 ' + 11 * dpr + 'px system-ui,"Segoe UI",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    const keep = tf, ts = th / 8.8; let edge = -1e9;      // every stored pose as a little figure with its name
+    B.keys.forEach(k => { const on = !B.playing && k.frame === f0, x = X(k.frame); tf = { s: ts, ox: x - k.pose.x * ts, oy: th + 2 * dpr, dpr }; ghost(g, M.fk(k.pose), on ? '#fff' : KCOL[k.kind], on ? 1 : 0.85, 1.3);
+      const tw = k.label ? g.measureText(k.label).width : 0; if (k.label && (on || x - tw / 2 > edge + 5 * dpr)) { g.fillStyle = on ? '#fff' : KCOL[k.kind]; g.fillText(k.label, x, th + 18 * dpr); edge = x + tw / 2; } });
+    tf = keep;
+    g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(X(first()), ky - 11 * dpr, X(last()) - X(first()), 22 * dpr);
     let step = 1; for (const c of [1, 2, 4, 6, 12, 24, 48, 96, 240]) { step = c; if (c * px >= 30 * dpr) break; }
-    g.font = 11 * dpr + 'px system-ui,"Segoe UI",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    g.font = 11 * dpr + 'px system-ui,"Segoe UI",sans-serif';
     for (let f = 1; f <= end; f++) { const big = (f - 1) % step === 0; if (!big && px < 4 * dpr) continue; g.fillStyle = big ? '#6f6a80' : '#3b3846'; g.fillRect(Math.round(X(f)), h - (big ? 24 : 19) * dpr, Math.max(1, dpr), (big ? 9 : 4) * dpr); if (big) { g.fillStyle = '#a6a1b4'; g.fillText(f, X(f), h - 4 * dpr); } }
     const dia = (x, y, r) => { g.beginPath(); g.moveTo(x, y - r); g.lineTo(x + r, y); g.lineTo(x, y + r); g.lineTo(x - r, y); g.closePath(); };
-    if (B.speed !== 1) rt.forEach((f, i) => { g.strokeStyle = AFTER; g.globalAlpha = 0.5; g.lineWidth = dpr; g.beginPath(); g.moveTo(X(fr[i]), ky); g.lineTo(X(f), ky + 17 * dpr); g.stroke(); g.globalAlpha = 1; dia(X(f), ky + 17 * dpr, 5 * dpr); g.lineWidth = 1.5 * dpr; g.stroke(); });
-    B.keys.forEach(k => { dia(X(k.frame), ky, 7 * dpr); g.fillStyle = ACC; g.fill(); if (!B.playing && k.frame === Math.round(B.cur)) { g.strokeStyle = '#fff'; g.lineWidth = 2 * dpr; g.stroke(); } });
-    g.fillStyle = '#fff'; g.fillRect(X(B.cur) - 0.75 * dpr, 2 * dpr, 1.5 * dpr, h - 28 * dpr);
+    if (B.speed !== 1) rt.forEach((f, i) => { g.strokeStyle = AFTER; g.globalAlpha = 0.5; g.lineWidth = dpr; g.beginPath(); g.moveTo(X(fr[i]), ky); g.lineTo(X(f), ky + 15 * dpr); g.stroke(); g.globalAlpha = 1; dia(X(f), ky + 15 * dpr, 4.5 * dpr); g.lineWidth = 1.5 * dpr; g.stroke(); });
+    B.keys.forEach(k => { const x = X(k.frame); if (k.kind === 'inbetween') { g.beginPath(); g.arc(x, ky, 4.5 * dpr, 0, 7); } else dia(x, ky, (k.kind === 'key' ? 7 : 5.5) * dpr);
+      g.fillStyle = KCOL[k.kind]; g.fill(); if (!B.playing && k.frame === f0) { g.strokeStyle = '#fff'; g.lineWidth = 2 * dpr; g.stroke(); } });
+    g.fillStyle = 'rgba(255,255,255,.85)'; g.fillRect(X(B.cur) - 0.75 * dpr, ky - 13 * dpr, 1.5 * dpr, h - 26 * dpr - (ky - 13 * dpr));
   }
 
   // ---------- panel
   function sync(light) {
     const f = Math.round(B.cur), i = keyAt(B.cur), p = pose(), n = last() - first(), pct = Math.round(B.speed * 100);
-    $('#bFrameLbl').textContent = 'Frame ' + (B.playing ? Math.floor(B.cur) : f) + ' of ' + last() + (B.playing ? '' : i >= 0 ? '   key pose' : f > first() && f < last() ? '   inbetween' : '');
+    $('#bFrameLbl').textContent = 'Frame ' + (B.playing ? Math.floor(B.cur) : f) + ' of ' + last() + (B.playing ? '' : i >= 0 ? '   ' + KNAME[B.keys[i].kind] : f > first() && f < last() ? '   inbetween' : '');
     if (!B.playing || !light) {
       $('#bAdd').disabled = i >= 0; $('#bDel').disabled = i < 0 || B.keys.length < 2;
       const kf = $('#bKF'); kf.disabled = i < 0; if (document.activeElement !== kf) kf.value = f;
+      const kk = $('#bKK'), kl = $('#bKL'); kk.disabled = kl.disabled = i < 0; kk.value = i >= 0 ? B.keys[i].kind : 'inbetween'; if (document.activeElement !== kl) kl.value = i >= 0 ? B.keys[i].label : '';
+      $('#bAbout').textContent = B.about || 'Pick one to load it. Each pose on the timeline is named and marked as a key, a breakdown or an inbetween.';
+      $('#bShowAction').checked = B.action; $('#bShowBalance').checked = B.balance; $('#bShowPivots').checked = B.pivots;
       let kb = B.keys[0]; for (const k of B.keys) if (k.frame <= f) kb = k; $('#bKE').value = kb.ease;
       const sp = $('#bSpeed'); sp.value = Math.round(Math.log2(B.speed) * 10); sp.nextElementSibling.textContent = pct + '%';
       const rt = M.retime(B.keys.map(k => k.frame), B.speed), n2 = rt[rt.length - 1] - rt[0], sec = v => (v / FPS).toFixed(2).replace(/\.?0+$/, '') + ' s';
@@ -1878,11 +2030,14 @@ const Body = (() => {
   $('#bAngle').addEventListener('input', e => { if (B.playing) stop(); if (!sliding) { pushUndo(); sliding = true; } const k = ensureKey(), v = +e.target.value; k.pose = B.sel === 'lean' ? M.leanTo(k.pose, v) : Object.assign({}, k.pose, { [B.sel]: v }); sync(true); });
   $('#bAngle').addEventListener('change', e => { sliding = false; blur(e); sync(); });
   $('#bStand').onclick = () => { if (B.playing) stop(); pushUndo(); const k = ensureKey(); k.pose = Object.assign(M.stand(), { x: k.pose.x }); sync(); };
-  $('#bDemo').onclick = () => { if (B.playing) stop(); pushUndo(); B.keys = starter(); B.cur = 1; B.speed = 1; note = 'Starter motion: crouch, stretch, settle'; sync(); };
+  for (const [id, pre] of [['bWalk', 'walk'], ['bPick', 'pickUp'], ['bRaise', 'raiseHand'], ['bDemo', 'starter']]) $('#' + id).onclick = () => { if (B.playing) stop(); pushUndo(); loadPreset(pre); note = ''; sync(); };
+  for (const [id, n] of [['bShowAction', 'action'], ['bShowBalance', 'balance'], ['bShowPivots', 'pivots']]) $('#' + id).onchange = e => { B[n] = e.target.checked; blur(e); sync(); };
+  $('#bKK').onchange = e => { const i = keyAt(B.cur); if (i < 0) return; pushUndo(); B.keys[i].kind = e.target.value; blur(e); sync(); };
+  $('#bKL').onchange = e => { const i = keyAt(B.cur); if (i < 0) return; pushUndo(); B.keys[i].label = e.target.value.trim().slice(0, 24); blur(e); sync(); };
   $('#bUndo').onclick = doUndo;
   $('#bSave').onclick = () => { download(new Blob([JSON.stringify(motionJSON(), null, 1)], { type: 'application/json' }), 'body_motion.json'); $('#bSaveInfo').textContent = 'Saved body_motion.json (' + B.keys.length + ' key poses).'; };
   $('#bLoadBtn').onclick = () => $('#bLoad').click();
-  async function openFile(file) { let j = null; try { j = JSON.parse(await file.text()); } catch (e) {} if (B.playing) stop(); const keep = JSON.stringify({ keys: B.keys, cur: Math.round(B.cur) });
+  async function openFile(file) { let j = null; try { j = JSON.parse(await file.text()); } catch (e) {} if (B.playing) stop(); const keep = snap();
     if (j && j.kind === 'animtk-body-motion' && loadMotion(j)) { undo.push(keep); $('#bSaveInfo').textContent = 'Opened ' + file.name + ' (' + B.keys.length + ' key poses).'; note = ''; } else $('#bSaveInfo').textContent = file.name + ' is not a saved body motion.'; sync(); }
   $('#bLoad').onchange = e => { if (e.target.files[0]) openFile(e.target.files[0]); e.target.value = ''; };
   $('#bPng').onclick = () => { const c = document.createElement('canvas'); c.width = view.width; c.height = view.height; const g = c.getContext('2d'); g.fillStyle = OUT; g.fillRect(0, 0, c.width, c.height); g.drawImage(view, 0, 0);
@@ -1946,13 +2101,13 @@ const Body = (() => {
     else if (k === 'k') $('#bAdd').click(); else if (k === 'o') $('#bOnion').click(); else if (k === 'delete') $('#bDel').click();
   });
   window.addEventListener('resize', () => { if (active()) { draw(); drawTime(); } });
-  try { const o = JSON.parse(localStorage.getItem(KEY) || 'null'); if (o && loadMotion(o.motion) && o.ui) for (const n of ['loop', 'onion', 'ik', 'plant']) if (typeof o.ui[n] === 'boolean') B[n] = o.ui[n];
+  try { const o = JSON.parse(localStorage.getItem(KEY) || 'null'); if (o && loadMotion(o.motion) && o.ui) for (const n of ['loop', 'onion', 'ik', 'plant', 'action', 'balance', 'pivots']) if (typeof o.ui[n] === 'boolean') B[n] = o.ui[n];
     if (o && o.ui) { if (o.ui.onionMode === 'frames') B.onionMode = 'frames'; if ([1, 2, 3].includes(o.ui.onionN)) B.onionN = o.ui.onionN; } } catch (e) {}
-  if (!B.keys.length) B.keys = starter();
+  if (!B.keys.length) loadPreset('starter');
   sync(true);
   const at = n => { const p = scr(M.fk(pose()).J[n]), r = view.getBoundingClientRect(); return [r.left + p[0] / tf.dpr, r.top + p[1] / tf.dpr]; };          // where a joint is on the page (for the tests)
   const frameAt = f => { const r = tl.getBoundingClientRect(); return [r.left + (ttf.x0 + (f - 1) * ttf.px) / ttf.dpr, r.top + ttf.ky / ttf.dpr]; };
-  return { B, pose, at, frameAt, ghosts, motionJSON, loadMotion, starter, sync, play, stop, isCycle: cycle };
+  return { B, pose, at, frameAt, ghosts, motionJSON, loadMotion, loadPreset, sync, play, stop, isCycle: cycle, balance: () => M.balance(pose()), line: () => M.actionLine(pose()), propNow: () => B.prop ? M.propAt(B.prop, B.keys, B.cur) : null };
 })();
 </script>
 </body>

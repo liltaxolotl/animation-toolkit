@@ -1,4 +1,5 @@
-// Body mode of animation_app.html: the posable mannequin, its timeline, onion skin and timing slider.
+// Body mode of animation_app.html: the posable mannequin, its timeline, onion skin and timing slider,
+// the preset motions (walk, pick up, raise a hand) and the teaching overlays (line of action, balance, pivots).
 //   node tests/test_app_body.mjs
 // Part 1 (no browser): the mannequin math inside the HTML (joints, reaching, key poses, retiming).
 // Part 2 (headless Chrome, needs `npm i puppeteer-core`): poses it with the real mouse, scrubs, plays,
@@ -58,6 +59,48 @@ check('timing: 200% halves the frames, 50% doubles them', M.retime([1, 13, 25], 
 check('timing: squeezed keys never land on the same frame', M.retime([1, 2, 3, 20], 4).join() === '1,2,3,6');
 check('angle bookkeeping stays continuous past a full turn', M.near(-170, 175) === 190 && M.near(10, 350) === 370 && M.near(45, 40) === 45);
 check('a saved pose with gaps is filled in from the standing pose', M.clean({ x: 2, elbowR: '33', kneeL: null }).elbowR === 33 && M.clean({ x: 2 }).x === 2 && M.clean({}).kneeL === 0 && M.clean(null).hipR === 5);
+
+// ---- the preset motions
+const W = M.presets.walk(), wk = W.keys, wf = n => M.fk(wk[n].pose);
+check('walk: 9 named poses on threes, contact, down, passing, up and round again', wk.map(k => k.frame).join() === '1,4,7,10,13,16,19,22,25' && wk.map(k => k.label).join() === 'Contact,Down,Passing,Up,Contact,Down,Passing,Up,Contact');
+check('walk: contacts are keys, passing is the breakdown, down and up are inbetweens', wk.map(k => k.kind[0]).join('') === 'kibikibik');
+check('walk: it ends on the pose it started with, and the second step mirrors the first', M.FIELDS.every(n => close(wk[0].pose[n], wk[8].pose[n])) && close(wk[4].pose.hipL, wk[0].pose.hipR) && close(wk[5].pose.kneeR, wk[1].pose.kneeL) && close(wk[6].pose.shoulderL, wk[2].pose.shoulderR));
+check('walk: the hips are lowest on the down pose and highest on the up pose', wk[1].pose.y < wk[0].pose.y && wk[0].pose.y < wk[2].pose.y && wk[2].pose.y < wk[3].pose.y, wk.slice(0, 4).map(k => k.pose.y.toFixed(2)).join(' '));
+check('walk: contact has the front heel down with the toes up, and the back foot on its toes', Math.abs(wf(0).J.heelR[1]) < 1e-6 && wf(0).J.toeR[1] > 0.25 && Math.abs(wf(0).J.toeL[1]) < 1e-6 && wf(0).J.heelL[1] > 0.25 && wf(0).J.ankleR[0] > 1 && wf(0).J.ankleL[0] < -1);
+check('walk: the arms swing against the legs', wk[0].pose.shoulderR < -15 && wk[0].pose.shoulderL > 15 && wk[4].pose.shoulderR > 15 && wk[4].pose.shoulderL < -15);
+check('walk: the passing leg is lifted and bent, the standing leg nearly straight', wk[2].pose.kneeL > 45 && wk[2].pose.kneeR < 22 && wf(2).J.ankleL[1] > 0.6);
+let lowW = 9, highW = -9, back = true, prevX = 9; for (let fr = 1; fr <= 25; fr += 0.25) { const pf = M.poseAt(wk, fr), v = M.lowest(pf); lowW = Math.min(lowW, v); highW = Math.max(highW, v); if (fr <= 13) { const x = M.fk(pf).J.ankleR[0]; if (x > prevX + 1e-9) back = false; prevX = x; } }
+check('walk: on every frame a foot is on the ground and none sinks into it', lowW > -0.02 && highW < 0.02, 'lowest point from ' + lowW.toFixed(3) + ' to ' + highW.toFixed(3));
+check('walk: the planted foot slides back steadily (walking on the spot)', back && close(M.fk(M.poseAt(wk, 5)).J.ankleR[0] - M.fk(M.poseAt(wk, 6)).J.ankleR[0], M.fk(M.poseAt(wk, 8)).J.ankleR[0] - M.fk(M.poseAt(wk, 9)).J.ankleR[0], 0.01));
+const PU = M.presets.pickUp(), pk = PU.keys, grabI = pk.findIndex(k => k.label === 'Grab'), gJ = M.fk(pk[grabI].pose).J;
+let slip = 0; for (let fr = 1; fr <= 54; fr += 0.5) { const J = M.fk(M.poseAt(pk, fr)).J; slip = Math.max(slip, dist(J.ankleR, fs0.J.ankleR), dist(J.ankleL, fs0.J.ankleL)); }
+check('pick up: keys, breakdowns and inbetweens are all there and named', ['key', 'breakdown', 'inbetween'].every(t => pk.some(k => k.kind === t)) && pk.every(k => k.label) && pk[0].label === 'Stand' && pk[pk.length - 1].kind === 'key', pk.map(k => k.label).join(', '));
+check('pick up: the feet never move', slip < 1e-6);
+check('pick up: on the grab the hand is at the thing, the knees are bent and the body is still balanced', dist([(gJ.wristR[0] + gJ.handR[0]) / 2, (gJ.wristR[1] + gJ.handR[1]) / 2], [PU.prop.x, PU.prop.y]) < 0.5 && pk[grabI].pose.kneeR > 90 && M.balance(pk[grabI].pose).state === 'balanced' && PU.prop.grab === pk[grabI].frame, 'hand ' + dist([(gJ.wristR[0] + gJ.handR[0]) / 2, (gJ.wristR[1] + gJ.handR[1]) / 2], [PU.prop.x, PU.prop.y]).toFixed(2) + ' heads from it');
+check('pick up: the thing stays put until the grab, then travels with the hand', dist(M.propAt(PU.prop, pk, 10), [PU.prop.x, PU.prop.y]) === 0 && dist(M.propAt(PU.prop, pk, 24), [PU.prop.x, PU.prop.y]) < 1e-9 && M.propAt(PU.prop, pk, 54)[1] > 3 && pk.every(k => M.balance(k.pose).state === 'balanced'));
+const RH = M.presets.raiseHand(), rk = RH.keys, rEnd = M.fk(rk[rk.length - 1].pose).J;
+check('raise a hand: a dip the other way first, the elbow leads, the hand overshoots, then settles above the head', rk[1].pose.shoulderR < rk[0].pose.shoulderR - 10 && rk[2].pose.elbowR > 90 && rk[2].kind === 'breakdown' && rk[3].pose.shoulderR > rk[4].pose.shoulderR + 5 && rEnd.handR[1] > rEnd.head[1] + 0.5 && rk[4].kind === 'key', rk.map(k => k.label).join(', '));
+check('every preset has feet on the ground on every stored pose and says what it teaches', ['walk', 'pickUp', 'raiseHand', 'starter'].every(n => { const m = M.presets[n](); return m.about.length > 40 && m.keys.every(k => Math.abs(M.lowest(k.pose)) < 1e-6 && M.KINDS.includes(k.kind)); }));
+
+// ---- balance and line of action
+let bal = M.balance(st);
+check('standing: the centre of gravity is a bit above the hips and over the feet', bal.state === 'balanced' && bal.com[1] > st.y + 0.1 && bal.com[1] < st.y + 0.8 && bal.support[0] < bal.com[0] && bal.com[0] < bal.support[1], 'at ' + bal.com.map(v => v.toFixed(2)).join(', ') + ', feet cover ' + bal.support.map(v => v.toFixed(2)).join(' to '));
+const tip = M.leanTo(M.moveHips(st, 0.9, st.y - 0.15, true), 30), okLean = M.leanTo(M.moveHips(st, -0.2, st.y - 0.15, true), 30);
+check('hips pushed out past the toes with a forward lean tips forward, and leaning back tips back', M.balance(tip).state === 'forward' && M.balance(tip).off > 0.05 && M.balance(M.leanTo(st, -45)).state === 'back', 'forward by ' + M.balance(tip).off.toFixed(2) + ' heads');
+check('the same lean with the hips back over the feet is balanced again', M.balance(okLean).state === 'balanced' && M.actionLine(M.leanTo(Object.assign({}, st, { spine: 30 }), 70)).top === 'head');
+check('off the ground it says in the air', M.balance(Object.assign({}, st, { y: st.y + 1 })).state === 'air' && M.support(Object.assign({}, st, { y: st.y + 1 })) === null);
+check('raising both arms lifts the centre of gravity', M.com(Object.assign({}, st, { shoulderR: 175, shoulderL: 175 }))[1] > bal.com[1] + 0.1);
+check('on tiptoe the feet cover much less ground', (() => { const t = M.posed({ y: st.y + 0.3, legR: [M.ankleOn(0.9, 50, 'toe'), 50], legL: [M.ankleOn(0.6, 50, 'toe'), 50] }), sp = M.support(t); return sp && sp[1] - sp[0] < 0.6 && Math.abs(M.lowest(t)) < 1e-6; })());
+check('walk: balanced on the contact pose, falling forward on the up pose', M.balance(wk[0].pose).state === 'balanced' && M.balance(wk[3].pose).state === 'forward');
+let ln = M.actionLine(st);
+check('line of action: standing straight is a straight line from the head to a foot', ln.shape === 'straight' && ln.top === 'head' && dist(ln.bez[0], fs0.J.head) === 0 && dist(ln.bez[3], fs0.J['ankle' + ln.leg]) === 0);
+ln = M.actionLine(M.presets.starter().keys[1].pose);
+check('line of action: a crouch is a C curve', ln.shape === 'C' && ln.bend > 0.15, 'bend ' + ln.bend.toFixed(2));
+ln = M.actionLine(Object.assign({}, st, { lean: -28, spine: 50, neck: 20, hipR: -30, hipL: -30, kneeR: 55, kneeL: 55, ankleR: -10, ankleL: -10 }));
+check('line of action: hips forward with the chest and knees folding back over them is an S curve', ln.shape === 'S', ln.shape + ', bend ' + ln.bend.toFixed(2));
+check('line of action: a hand reaching over the head starts the line, and a forward lean runs out through the back leg', M.actionLine(rk[4].pose).top === 'handR' && M.actionLine(wk[0].pose).leg === 'L' && M.actionLine(wk[4].pose).leg === 'R');
+const fit = M.bezFit([[0, 0], [1, 2], [2, 3], [3, 3], [4, 2], [5, 0]]), bz = t => [0, 1].map(k => (1 - t) ** 3 * fit[0][k] + 3 * (1 - t) ** 2 * t * fit[1][k] + 3 * (1 - t) * t * t * fit[2][k] + t ** 3 * fit[3][k]);
+check('the curve fit starts and ends on the end points and arches over the middle ones', dist(fit[0], [0, 0]) === 0 && dist(fit[3], [5, 0]) === 0 && close(bz(0.5)[0], 2.5, 0.05) && bz(0.5)[1] > 2.6 && bz(0.5)[1] < 3.4, 'top at ' + bz(0.5).map(v => v.toFixed(2)).join(', '));
 
 // ---------------------------------------------------------------- part 2: the app itself
 let puppeteer;
@@ -159,6 +202,51 @@ await page.click('#bPng');
 check('Save this frame writes a PNG', await waitFile('body_frame_0001.png'));
 await page.reload(); await page.click('[data-mode="body"]'); s = await S();
 check('the motion is still there after closing and reopening the page', s.frames.join() === '1,7,11,19,30');
+
+// preset motions and their labels
+const lbl = () => page.$eval('#bPoseLbl', e => e.innerText.replace(/\s+/g, ' ').trim()), goto = async fr => { const q = await fx(fr); await page.mouse.click(q[0], q[1] + 22); };
+await page.click('#bWalk'); s = await S();
+check('Walk cycle loads 9 poses and says what it teaches', s.frames.join() === '1,4,7,10,13,16,19,22,25' && /contact poses are the keys/.test(await page.$eval('#bAbout', e => e.textContent)) && (await page.evaluate(() => Body.isCycle())));
+check('frame 1 is labelled Contact, a key pose', /^Contact KEY POSE/.test(await lbl()) && /Frame 1 of 25\s+key pose/.test(await page.$eval('#bFrameLbl', e => e.textContent)), await lbl());
+await goto(7); const l7 = await lbl(); await goto(10); const l10 = await lbl(); await goto(5); const l5 = await lbl();
+check('passing is labelled a breakdown, up an inbetween, and frame 5 says which poses it sits between', /^Passing BREAKDOWN/.test(l7) && /^Up INBETWEEN/.test(l10) && /^inbetween from Down to Passing/.test(l5), [l7, l10, l5].join(' | '));
+await page.screenshot({ path: path.join(out, 'app_body_walk.png') });
+await page.evaluate(() => { Body.B.cur = 1; Body.sync(); }); await page.keyboard.press('Space'); await sleep(1500); s = await S();
+check('the walk loops without stopping', s.playing && s.cur >= 1 && s.cur < 25); await page.keyboard.press('Space');
+await goto(4); await page.select('#bKK', 'breakdown'); await page.click('#bKL', { clickCount: 3 }); await page.keyboard.type('Squash'); await page.keyboard.press('Tab');
+let k4 = await page.evaluate(() => Body.B.keys[1]);
+check('a pose can be renamed and its type changed', k4.kind === 'breakdown' && k4.label === 'Squash' && /^Squash BREAKDOWN/.test(await lbl()), await lbl());
+let hd2 = await at('head'); await goto(6); hd2 = await at('head'); await dragBy(hd2, 30, 20); k4 = await page.evaluate(() => Body.B.keys.find(k => k.frame === 6));
+check('a pose made by hand starts as an unnamed key pose', !!k4 && k4.kind === 'key' && k4.label === '' && /^Frame 6 KEY POSE/.test(await lbl()), await lbl());
+await page.click('#bPick'); s = await S(); let ball = await page.evaluate(() => Body.propNow());
+const teal = () => ink([60, 199, 180]);
+check('Pick something up loads with the thing on the ground in front', s.frames.join() === '1,6,14,24,30,40,48,54' && ball[1] < 0.5 && ball[0] > 1.2 && (await teal()) > 400, 'ball at ' + ball.map(v => v.toFixed(2)).join(', '));
+await goto(54); ball = await page.evaluate(() => Body.propNow());
+check('by the last pose the hand has carried it up', ball[1] > 3 && /^Holding it KEY POSE/.test(await lbl()), 'ball at ' + ball.map(v => v.toFixed(2)).join(', '));
+await page.click('#bRaise'); s = await S(); await goto(11);
+check('Raise a hand loads, the thing is gone, and frame 11 is the breakdown', s.frames.join() === '1,5,11,17,22,34' && (await teal()) === 0 && /^Elbow leads BREAKDOWN/.test(await lbl()), await lbl());
+
+// teaching overlays
+await page.click('#bWalk');
+const gold = () => ink([255, 216, 77]), cyan = () => ink([88, 214, 232]), green = () => ink([47, 191, 113]), red = () => ink([255, 85, 96]);
+const g0 = await gold(), c0 = await cyan(), n0 = await green();
+await page.click('#bShowAction'); const g1 = await gold();
+check('Line of action draws one gold curve and names its shape', g0 === 0 && g1 > 800 && /Line of action: a C curve/.test(await lbl()), g1 + ' gold pixels, ' + (await lbl()));
+await page.click('#bShowBalance'); const n1 = await green(); let bl = await page.evaluate(() => Body.balance());
+check('Balance on the contact pose: green, centre of gravity between the feet', n0 === 0 && n1 > 400 && bl.state === 'balanced' && /Balanced: the weight is over the feet/.test(await lbl()), n1 + ' green pixels');
+await goto(10); bl = await page.evaluate(() => Body.balance());
+check('Balance on the up pose: red, tipping forward', bl.state === 'forward' && (await red()) > 300 && (await green()) === 0 && /Off balance: tipping forward/.test(await lbl()), await lbl());
+await page.screenshot({ path: path.join(out, 'app_body_overlays.png') });
+await page.click('#bShowPivots'); const c1 = await cyan();
+check('Pivots marks every joint and how far it is bent', c0 === 0 && c1 > 600 && /Pivots:/.test(await lbl()), c1 + ' cyan pixels');
+await page.reload(); await page.click('[data-mode="body"]');
+check('the overlays and the motion are remembered', await page.evaluate(() => Body.B.action && Body.B.balance && Body.B.pivots && Body.B.name === 'Walk cycle' && Body.B.keys[2].label === 'Passing' && Body.B.keys[2].kind === 'breakdown'));
+await page.click('#bShowAction'); await page.click('#bShowBalance'); await page.click('#bShowPivots');
+check('switching them off clears them', (await gold()) === 0 && (await cyan()) === 0 && !/Line of action|Balance|Pivots/.test(await lbl()));
+await page.click('#bPick'); await page.click('#bSave'); await sleep(400); const files = fs.readdirSync(dl).filter(n => /^body_motion.*\.json$/.test(n)).map(n => path.join(dl, n)).sort((u, v) => fs.statSync(v).mtimeMs - fs.statSync(u).mtimeMs), sv2 = JSON.parse(fs.readFileSync(files[0], 'utf8'));
+check('a saved motion keeps the names, the types, the thing and the note', sv2.name === 'Pick something up' && sv2.prop.grab === 24 && sv2.keys[2].kind === 'breakdown' && sv2.keys[2].label === 'Hips back' && sv2.about.length > 40);
+await page.click('#bRaise'); await (await page.$('#bLoad')).uploadFile(files[0]); await sleep(300);
+check('and opening it brings them all back', await page.evaluate(() => Body.B.name === 'Pick something up' && Body.B.prop && Body.B.prop.grab === 24 && Body.B.keys[5].kind === 'breakdown' && Body.B.keys[5].label === 'Legs push'));
 await page.click('#bDemo'); x13 = await fx(13); await page.mouse.click(x13[0], x13[1] + 22); await page.click('#bOnion'); await page.screenshot({ path: path.join(out, 'app_body.png') });
 check('no script errors', errors.length === 0, errors.join(' | '));
 await browser.close();
