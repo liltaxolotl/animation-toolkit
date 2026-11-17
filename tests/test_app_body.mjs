@@ -1,5 +1,6 @@
 // Body mode of animation_app.html: the posable mannequin, its timeline, onion skin and timing slider,
-// the preset motions (walk, pick up, raise a hand) and the teaching overlays (line of action, balance, pivots).
+// the preset motions (walk, pick up, raise a hand, the walk and run library, jump, stop short), the teaching overlays
+// (line of action, balance, pivots, joint limits, muscles, hair and scarf), the proportion guide and the hands and feet sheet.
 //   node tests/test_app_body.mjs
 // Part 1 (no browser): the mannequin math inside the HTML (joints, reaching, key poses, retiming).
 // Part 2 (headless Chrome, needs `npm i puppeteer-core`): poses it with the real mouse, scrubs, plays,
@@ -73,9 +74,9 @@ let lowW = 9, highW = -9, back = true, prevX = 9; for (let fr = 1; fr <= 25; fr 
 check('walk: on every frame a foot is on the ground and none sinks into it', lowW > -0.02 && highW < 0.02, 'lowest point from ' + lowW.toFixed(3) + ' to ' + highW.toFixed(3));
 check('walk: the planted foot slides back steadily (walking on the spot)', back && close(M.fk(M.poseAt(wk, 5)).J.ankleR[0] - M.fk(M.poseAt(wk, 6)).J.ankleR[0], M.fk(M.poseAt(wk, 8)).J.ankleR[0] - M.fk(M.poseAt(wk, 9)).J.ankleR[0], 0.01));
 const PU = M.presets.pickUp(), pk = PU.keys, grabI = pk.findIndex(k => k.label === 'Grab'), gJ = M.fk(pk[grabI].pose).J;
-let slip = 0; for (let fr = 1; fr <= 54; fr += 0.5) { const J = M.fk(M.poseAt(pk, fr)).J; slip = Math.max(slip, dist(J.ankleR, fs0.J.ankleR), dist(J.ankleL, fs0.J.ankleL)); }
+let slip = 0; for (let fr = 1; fr <= 54; fr += 0.5) { const J = M.fk(M.poseAt(pk, fr)).J; slip = Math.max(slip, dist(J.ankleR, fs0.J.ankleR), dist(J.toeL, fs0.J.toeL)); }
 check('pick up: keys, breakdowns and inbetweens are all there and named', ['key', 'breakdown', 'inbetween'].every(t => pk.some(k => k.kind === t)) && pk.every(k => k.label) && pk[0].label === 'Stand' && pk[pk.length - 1].kind === 'key', pk.map(k => k.label).join(', '));
-check('pick up: the feet never move', slip < 1e-6);
+check('pick up: the near foot never moves and the far foot keeps its toes on the spot (its heel peels up in the deep bend)', slip < 1e-6 && gJ.heelL[1] > 0.2 && Math.abs(gJ.toeL[1]) < 1e-6);
 check('pick up: on the grab the hand is at the thing, the knees are bent and the body is still balanced', dist([(gJ.wristR[0] + gJ.handR[0]) / 2, (gJ.wristR[1] + gJ.handR[1]) / 2], [PU.prop.x, PU.prop.y]) < 0.5 && pk[grabI].pose.kneeR > 90 && M.balance(pk[grabI].pose).state === 'balanced' && PU.prop.grab === pk[grabI].frame, 'hand ' + dist([(gJ.wristR[0] + gJ.handR[0]) / 2, (gJ.wristR[1] + gJ.handR[1]) / 2], [PU.prop.x, PU.prop.y]).toFixed(2) + ' heads from it');
 check('pick up: the thing stays put until the grab, then travels with the hand', dist(M.propAt(PU.prop, pk, 10), [PU.prop.x, PU.prop.y]) === 0 && dist(M.propAt(PU.prop, pk, 24), [PU.prop.x, PU.prop.y]) < 1e-9 && M.propAt(PU.prop, pk, 54)[1] > 3 && pk.every(k => M.balance(k.pose).state === 'balanced'));
 const RH = M.presets.raiseHand(), rk = RH.keys, rEnd = M.fk(rk[rk.length - 1].pose).J;
@@ -103,6 +104,53 @@ const fit = M.bezFit([[0, 0], [1, 2], [2, 3], [3, 3], [4, 2], [5, 0]]), bz = t =
 check('the curve fit starts and ends on the end points and arches over the middle ones', dist(fit[0], [0, 0]) === 0 && dist(fit[3], [5, 0]) === 0 && close(bz(0.5)[0], 2.5, 0.05) && bz(0.5)[1] > 2.6 && bz(0.5)[1] < 3.4, 'top at ' + bz(0.5).map(v => v.toFixed(2)).join(', '));
 
 // ---------------------------------------------------------------- part 2: the app itself
+// ---- phase 4: the walk and run library, joint ranges, proportions
+const sweep = (m, stepF) => { let low = 9, high = -9, air = 0, lim = 0, n = 0; const k = m.keys; for (let fr = k[0].frame; fr <= k[k.length - 1].frame; fr += stepF || 0.5) { const pf = M.poseAt(k, fr), v = M.lowest(pf); low = Math.min(low, v); high = Math.max(high, v); n++; if (M.balance(pf).state === 'air') air++; lim += M.limits(pf).length; } return { low, high, air, lim, n }; };
+const lib = { happyWalk: 10, sneak: 24, tiredWalk: 16, run: 8 }, G = {}; for (const id in lib) G[id] = M.presets[id]();
+check('library: happy walk, sneak, tired walk and run are two-step cycles of 10, 24, 16 and 8 frames a step', Object.keys(lib).every(id => { const k = G[id].keys; return k.length === 9 && k[8].frame === 1 + 2 * lib[id] && k[4].frame === 1 + lib[id] && M.FIELDS.every(n => close(k[0].pose[n], k[8].pose[n])); }));
+check('library: in each the second step mirrors the first and every pose is named and typed', Object.keys(lib).every(id => { const k = G[id].keys; return close(k[4].pose.hipL, k[0].pose.hipR) && close(k[6].pose.shoulderL, k[2].pose.shoulderR) && k.every(q => q.label && M.KINDS.includes(q.kind)) && k[0].kind === 'key' && k[2].kind === 'breakdown' && G[id].about.length > 60; }));
+const sw = {}; for (const id of Object.keys(lib).concat(['walk', 'jump', 'stopShort', 'pickUp', 'raiseHand', 'starter'])) sw[id] = sweep(M.presets[id]());
+check('library: no foot sinks into the ground on any frame of any motion', Object.values(sw).every(v => v.low > -0.01), Object.entries(sw).map(([n, v]) => n + ' ' + v.low.toFixed(3)).join(', '));
+check('library: the walks always have a foot on the ground, and the run has frames with both feet in the air', ['walk', 'happyWalk', 'sneak', 'tiredWalk'].every(n => sw[n].air === 0 && sw[n].high < 0.02) && sw.run.air > 4 && M.balance(G.run.keys[3].pose).state === 'air' && G.run.keys[3].label === 'In the air');
+const bounce = k => Math.max(...k.map(q => q.pose.y)) - Math.min(...k.map(q => q.pose.y)), wy = bounce(wk);
+check('library: the happy walk bounces more than the plain walk and the tired walk less, with its back rounded and its head hanging', bounce(G.happyWalk.keys) > wy * 1.4 && bounce(G.tiredWalk.keys) < wy * 0.5 && G.tiredWalk.keys.every(q => q.pose.spine > 15 && q.pose.neck > 15) && G.happyWalk.keys.every(q => q.pose.spine < 0), 'walk ' + wy.toFixed(2) + ', happy ' + bounce(G.happyWalk.keys).toFixed(2) + ', tired ' + bounce(G.tiredWalk.keys).toFixed(2));
+const sn0 = M.fk(G.sneak.keys[0].pose).J;
+check('library: the sneak stays low and puts the toe down first', G.sneak.keys.every(q => q.pose.y < 3.3) && Math.abs(sn0.toeR[1]) < 1e-6 && sn0.heelR[1] > 0.15 && Math.abs(sn0.heelL[1]) < 1e-6, 'hips at ' + G.sneak.keys.map(q => q.pose.y.toFixed(2)).slice(0, 4).join(' '));
+const JP = M.presets.jump(), jk = JP.keys, jl = n => jk.find(q => q.label === n), span = q => { const J = M.fk(q.pose).J; return Math.max(J.head[1], J.handR[1]) - Math.min(J.toeR[1], J.heelR[1]); }, ld = M.fk(jl('Land').pose).J;
+check('jump: squash on the anticipation, stretch at push off, in the air at the top, lands on the toes, squashes again and settles', span(jl('Anticipation')) < span(jk[0]) * 0.75 && span(jl('Push off')) > span(jk[0]) * 1.2 && M.balance(jl('Top of the jump').pose).state === 'air' && jl('Top of the jump').pose.y === Math.max(...jk.map(q => q.pose.y))
+  && Math.abs(ld.toeR[1]) < 1e-6 && ld.heelR[1] > 0.3 && jl('Squash').pose.y < jl('Land').pose.y - 1 && M.FIELDS.every(n => close(jk[0].pose[n], jk[jk.length - 1].pose[n])), 'tall ' + [jk[0], jl('Anticipation'), jl('Push off')].map(q => span(q).toFixed(1)).join(' -> '));
+check('joint ranges: a standing figure is inside them, and so is every frame of every motion', M.limits(st).length === 0 && Object.values(sw).every(v => v.lim === 0), Object.entries(sw).filter(e => e[1].lim).map(e => e[0]).join(', '));
+let lm = M.limits(Object.assign({}, st, { elbowR: -40, kneeL: 160, shoulderR: 400 }));
+check('joint ranges: an elbow bent 40 the wrong way is flagged as 35 past, a knee at 160 as a 10 degree stretch, and a full extra turn is not a fault', lm.length === 2 && lm.find(v => v.joint === 'elbowR').level === 'past' && close(lm.find(v => v.joint === 'elbowR').by, -35) && lm.find(v => v.joint === 'kneeL').level === 'stretch' && close(lm.find(v => v.joint === 'kneeL').by, 10));
+check('proportions: eight bodies, and each stands as many of its own heads tall as it says', M.BODIES.length === 8 && M.BODIES.every(b => close(M.tallOf(b.P), b.heads, 0.03)) && ['adult', 'child', 'toddler', 'cartoon', 'chibi'].every(id => M.BODIES.some(b => b.id === id)), M.BODIES.map(b => b.name + ' ' + M.tallOf(b.P).toFixed(2)).join(', '));
+const hipAt = id => { const b = M.BODIES.find(q => q.id === id); return M.stand(b.P).y / M.tallOf(b.P); };
+check('proportions: halfway up is at the hips on the adult, above them on the child and well above on the toddler', close(hipAt('adult'), 0.5, 0.03) && hipAt('child') < hipAt('adult') - 0.02 && hipAt('toddler') < 0.4 && hipAt('chibi') < hipAt('toddler'));
+check('proportions: any pose can be put on any body with its lowest point on the ground', M.BODIES.every(b => Math.abs(M.lowest(M.fit(wk[0].pose, b.P), b.P)) < 1e-9 && Object.values(M.fit(jl('Anticipation').pose, b.P)).every(Number.isFinite)));
+
+// ---- phase 5: muscles, hands and feet, loose things
+const mus = q => { const o = {}; for (const m of M.muscles(q)) if (m.side !== 'L') o[m.name] = m; return o; }, len = m => dist(m.a, m.b), m0 = mus(st), m1 = mus(Object.assign({}, st, { elbowR: 125, kneeR: 110, ankleR: -40, spine: 35 }));
+check('muscles: nothing is bunched or stretched in the standing pose', Object.values(m0).every(m => Math.abs(m.flex) < 0.2) && Object.keys(m0).length === 14, Object.keys(m0).join(', '));
+check('muscles: bending the elbow bunches the biceps (shorter and fatter) and stretches the triceps (longer and thinner)', m1.Biceps.flex > 0.8 && len(m1.Biceps) < len(m0.Biceps) * 0.9 && m1.Biceps.t > m0.Biceps.t * 1.3 && m1.Triceps.flex < -0.8 && len(m1.Triceps) > len(m0.Triceps) * 1.1 && m1.Triceps.t < m0.Triceps.t * 0.7);
+check('muscles: a bent knee stretches the quads and bunches the hamstrings, pointed toes bunch the calf, a bowed spine bunches the abs', m1.Quads.flex < -0.6 && m1.Hamstrings.flex > 0.6 && m1.Calf.flex > 0.8 && m1.Shin.flex < -0.8 && m1.Abs.flex > 0.7 && m1['Lower back'].flex < -0.7);
+const hd0 = id => M.hand(M.HANDS.find(g => g.id === id)), ho = hd0('open'), hf = hd0('fist'), hp = hd0('point'), hw = M.HANDS.find(g => g.id === 'wave');
+check('hands: eight gestures, with gripping, pointing and waving among them', M.HANDS.length === 8 && ['grip', 'point', 'wave', 'fist', 'open', 'pinch'].every(id => M.HANDS.some(g => g.id === id)) && M.HANDS.every(g => g.note.length > 20));
+check('hands: the knuckles sit on an arc and the middle finger reaches furthest', ho.fingers[1][0][1] > ho.fingers[0][0][1] && ho.fingers[1][0][1] > ho.fingers[2][0][1] && ho.fingers[2][0][1] > ho.fingers[3][0][1] && ho.tips[1][1] === Math.max(...ho.tips.slice(0, 4).map(t => t[1])) && ho.tips[1][1] > 1.9);
+check('hands: a fist folds every fingertip back onto the palm, and pointing leaves one finger out', hf.tips.slice(0, 4).every((t, i) => t[1] < hf.fingers[i][0][1] - 0.15 && Math.abs(t[0]) < 0.5) && hp.tips[0][1] > 1.8 && hp.tips.slice(1, 4).every((t, i) => t[1] < hp.fingers[i + 1][0][1]));
+check('hands: in the pinch the thumb tip meets the fingertip, and the wave swings the whole hand both ways', dist(hd0('pinch').tips[0], hd0('pinch').tips[4]) < 0.1 && hw.rot !== 0 && M.hand(hw).tips[1][0] > 0.3 && M.hand(hw, -hw.rot).tips[1][0] < -0.3, 'gap ' + dist(hd0('pinch').tips[0], hd0('pinch').tips[4]).toFixed(3));
+const ft = id => M.foot(M.FEET.find(g => g.id === id)), heelY = id => ft(id).rear[0][1];
+check('feet: flat has heel, ball and toes down; the heel strike only the heel; push off and tiptoe the ball and toes with the heel up; pointed and flexed touch nothing', ft('flat').heelDown && ft('flat').ballDown && ft('flat').toesDown && ft('heel').heelDown && !ft('heel').ballDown && !ft('heel').toesDown
+  && ['push', 'tiptoe'].every(id => !ft(id).heelDown && ft(id).ballDown && ft(id).toesDown) && heelY('tiptoe') > heelY('push') && heelY('push') > 0.4 && ['pointed', 'flexed'].every(id => !ft(id).heelDown && !ft(id).ballDown && !ft(id).toesDown) && M.FEET.length === 6);
+const SS = M.presets.stopShort(), sk2 = SS.keys, stopF = sk2.find(q => q.label === 'Body stops').frame, tr = fr => { const o = {}; for (const c of M.trails(sk2, fr)) o[c.name] = c.pts; return o; }, tipX = (c, fr) => { const q = tr(fr)[c]; return q[q.length - 1][0] - q[0][0]; };
+const t1 = tr(1), links = Object.values(tr(18)).every(q => q.slice(1).every((v, i) => close(dist(v, q[i]), dist(q[1], q[0]), 0.03)));
+check('loose things: hair, scarf and coat tail hang straight down while the body is still, and their links keep their length', Object.keys(t1).join() === 'hair,scarf,coat' && Object.values(t1).every(q => q.every(v => Math.abs(v[0] - q[0][0]) < 0.05) && q[q.length - 1][1] < q[0][1] - 1) && links);
+let fwd = -9; for (let fr = stopF; fr <= stopF + 10; fr++) fwd = Math.max(fwd, tipX('scarf', fr));
+const headMove = Math.abs(M.fk(M.poseAt(sk2, stopF + 10)).J.head[0] - M.fk(M.poseAt(sk2, stopF)).J.head[0]), endQ = tr(50).scarf, endP = tr(49).scarf;
+check('stop short: the loose things trail behind while the body moves, swing on past it after it stops, and have settled by the end', tipX('hair', 10) < -0.5 && tipX('scarf', 10) < -0.5 && fwd > 0.4 && headMove < 0.6 && dist(endQ[5], endP[5]) < 0.03 && Math.abs(tipX('hair', 50)) < 0.6, 'scarf trails ' + tipX('scarf', 10).toFixed(2) + ', then swings ' + fwd.toFixed(2) + ' ahead');
+const armAt = fr => M.fk(M.poseAt(sk2, fr)).J.handR[0] - M.poseAt(sk2, fr).x;
+check('stop short: the arms carry on after the body stops, swing back past rest, and settle', armAt(18) > armAt(stopF) + 1 && armAt(23) < armAt(50) - 0.3 && armAt(29) > armAt(50) && SS.trails === true && sk2.find(q => q.label === 'Arms carry on').kind === 'breakdown' && Math.abs(M.poseAt(sk2, 20).x - M.poseAt(sk2, stopF).x) < 0.1);
+const wa = M.trails(wk, 1, undefined, true), wb = M.trails(wk, 25, undefined, true);
+check('loose things: the same frame always gives the same answer, and on a cycle the swing has found its rhythm', JSON.stringify(tr(30)) === JSON.stringify(tr(30)) && wa.every((c, i) => dist(c.pts[c.pts.length - 1], wb[i].pts[wb[i].pts.length - 1]) < 0.25), wa.map((c, i) => dist(c.pts[c.pts.length - 1], wb[i].pts[wb[i].pts.length - 1]).toFixed(2)).join(' '));
+
 let puppeteer;
 for (const base of [root, path.join(root, '_scratch'), process.cwd()]) { try { puppeteer = createRequire(path.join(base, 'x.js'))('puppeteer-core'); break; } catch (e) {} }
 const chrome = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
@@ -247,6 +295,46 @@ await page.click('#bPick'); await page.click('#bSave'); await sleep(400); const 
 check('a saved motion keeps the names, the types, the thing and the note', sv2.name === 'Pick something up' && sv2.prop.grab === 24 && sv2.keys[2].kind === 'breakdown' && sv2.keys[2].label === 'Hips back' && sv2.about.length > 40);
 await page.click('#bRaise'); await (await page.$('#bLoad')).uploadFile(files[0]); await sleep(300);
 check('and opening it brings them all back', await page.evaluate(() => Body.B.name === 'Pick something up' && Body.B.prop && Body.B.prop.grab === 24 && Body.B.keys[5].kind === 'breakdown' && Body.B.keys[5].label === 'Legs push'));
+// ---- phases 4 and 5 in the app
+const sum = () => page.evaluate(() => { const c = document.querySelector('#bView'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let h = 0; for (let i = 0; i < d.length; i += 16) h = (h * 31 + d[i] + d[i + 1] * 3 + d[i + 2] * 7) | 0; return h; });
+const BS = () => page.evaluate(() => ({ name: Body.B.name, n: Body.B.keys.length, view: Body.B.view, zoom: Body.B.zoom, trails: Body.B.trails, limits: Body.B.limits, muscles: Body.B.muscles, cycle: Body.isCycle(), last: Body.B.keys[Body.B.keys.length - 1].frame }));
+const names = {}; for (const [id, nm] of [['bHappy', 'Happy walk'], ['bSneak', 'Sneak'], ['bTired', 'Tired walk'], ['bRun', 'Run'], ['bJump', 'Jump']]) { await page.click('#' + id); names[nm] = await BS(); }
+check('the library buttons load the happy walk, sneak, tired walk, run and jump', Object.entries(names).every(([nm, v]) => v.name === nm && v.n >= 8) && names.Run.cycle && names.Run.last === 17 && names.Sneak.last === 49);
+check('a motion that goes high zooms the picture out just enough to stay in it', names.Jump.zoom < 0.97 && names.Jump.zoom > 0.7 && names.Run.zoom === 1, 'jump zoom ' + names.Jump.zoom.toFixed(2));
+await page.click('#bPlay'); await sleep(500); s = await S(); await page.click('#bPlay');
+check('the jump plays', s.playing && s.cur > 3);
+await page.click('#bDemo'); const pinkB = () => ink([255, 61, 110]), mint = () => ink([127, 224, 168]);
+await page.evaluate(() => { Body.B.sel = 'elbowR'; Body.sync(); }); const mintOn = await mint(), pk0 = await pinkB();
+const setAngle = v => page.evaluate(v => { const a = document.querySelector('#bAngle'); a.value = v; a.dispatchEvent(new Event('input')); a.dispatchEvent(new Event('change')); }, v);
+await setAngle(-40); let lim = await page.evaluate(() => Body.limits()), rangeTxt = await page.$eval('#bRange', e => e.textContent);
+check('joint limits are on from the start: the selected joint shows its real range, and nothing is flagged on a fresh motion', (await BS()).limits && mintOn > 150 && pk0 === 0 && /-5° to 150°/.test(rangeTxt));
+check('bending the elbow 40 the wrong way rings it, says so on the picture, in the label and under the slider', lim.length === 1 && lim[0].joint === 'elbowR' && (await pinkB()) > 150 && /Past what a real joint does: near elbow by 35°/.test(await lbl()) && /35° past it/.test(rangeTxt), rangeTxt.slice(0, 60));
+await page.click('#bShowLimits');
+check('switching Joint limits off clears the warning and the range', (await pinkB()) === 0 && (await mint()) === 0 && !/real joint/.test(await lbl()));
+await page.click('#bShowLimits'); await setAngle(120); const plain = await sum(); await page.click('#bShowMuscles'); const withM = await sum(), mlbl = await lbl();
+check('Muscles draws the muscle groups and names what the selected joint does to them', withM !== plain && /Muscles: red = bunched up/.test(mlbl) && /biceps bunches up, triceps stretches/.test(mlbl), mlbl.slice(-70));
+await page.click('#bShowMuscles'); check('and switches off again', (await sum()) === plain && !/Muscles/.test(await lbl()));
+await page.click('#bStop'); const hairC = () => ink([181, 140, 255]); let bs = await BS();
+check('Stop short switches Hair and scarf on by itself and draws them', bs.name === 'Stop short' && bs.trails && (await hairC()) > 300 && (await ink([255, 122, 168])) > 300 && await page.$eval('#bShowTrails', e => e.checked));
+const sc = await page.evaluate(() => [10, 18].map(fr => { const t = Body.trails(fr).find(c => c.name === 'scarf').pts; return t[t.length - 1][0] - t[0][0]; }));
+check('in the app the scarf trails behind on the step and swings ahead after the stop', sc[0] < -0.5 && sc[1] > 0.3, sc.map(v => v.toFixed(2)).join(' then '));
+await page.click('#bShowTrails'); check('Hair and scarf switches off', (await hairC()) === 0 && !(await BS()).trails);
+const poseSum = await sum(), keysBefore = await page.evaluate(() => JSON.stringify(Body.B.keys));
+await page.click('[data-view="chart"]'); const chartSum = await sum(); bs = await BS();
+check('Proportions shows the eight bodies in a row instead of the mannequin', bs.view === 'chart' && chartSum !== poseSum && (await ink([236, 232, 244])) > 8000 && (await lbl()) === '' && await page.$eval('#bHint', e => e.style.display === 'none'));
+await page.click('#bChartSame'); const sameSum = await sum(); await page.evaluate(() => { Body.B.cur = 10; }); await page.click('#bChartPose'); const posedSum = await sum();
+check('the guide can draw them all the same height, and in the pose on this frame', sameSum !== chartSum && posedSum !== sameSum);
+await page.click('#bPng'); const gotPng = await waitFile('body_proportions.png') || (await sleep(6000), await waitFile('body_proportions.png')); check('it saves as its own picture', gotPng, await page.$eval('#bSaveInfo', e => e.textContent) + ' | ' + fs.readdirSync(dl).join(' '));
+await page.click('#bChartSame'); await page.click('#bChartPose'); await page.screenshot({ path: path.join(out, 'app_body_proportions.png') });
+await page.click('[data-view="sheet"]'); const sheetSum = await sum(), vb = await page.$eval('#bView', e => { const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; });
+await dragBy(vb, 80, 60); await dragBy([vb[0] - 200, vb[1] - 100], 50, 50);
+check('Hands and feet shows the sheet: the bar in the gripping hand and the green ground marks under the feet', (await BS()).view === 'sheet' && sheetSum !== chartSum && (await teal()) > 500 && (await green()) > 100);
+check('dragging on the guide or the sheet does not pose anything', (await page.evaluate(() => JSON.stringify(Body.B.keys))) === keysBefore && (await sum()) === sheetSum);
+await page.screenshot({ path: path.join(out, 'app_body_hands_feet.png') });
+await page.reload(); await page.click('[data-mode="body"]'); bs = await BS();
+check('the view and the new switches are remembered', bs.view === 'sheet' && bs.limits && !bs.trails && bs.name === 'Stop short');
+await page.click('#bWalk'); bs = await BS();
+check('picking a motion goes back to the mannequin', bs.view === 'pose' && bs.name === 'Walk cycle' && /Contact/.test(await lbl()));
 await page.click('#bDemo'); x13 = await fx(13); await page.mouse.click(x13[0], x13[1] + 22); await page.click('#bOnion'); await page.screenshot({ path: path.join(out, 'app_body.png') });
 check('no script errors', errors.length === 0, errors.join(' | '));
 await browser.close();

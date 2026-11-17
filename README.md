@@ -43,6 +43,7 @@ The app needs nothing installed: open `animation_app.html` in Chrome or Edge. It
 | "Check the proportions / balance / this hand / this cat" | `anatomy_guide.py` |
 | "Which mouth goes on which frame?" | `lip_sync.py` |
 | "Show me how a body bends / let me pose a figure and time it" | Body mode in the app |
+| "How many heads tall is a kid / a chibi?" / "what does a walk, sneak, run, jump look like?" / "show me a hand gripping" | Body mode in the app (Proportions, the motion library, Hands and feet) |
 | "Mark shot 12 as cleaned up" | `tracker_update.py` |
 
 Every script prints a short plain summary and the list of files it saved. Run any script with `-h`, or read the
@@ -77,8 +78,8 @@ A key can carry its drawing so keys can be lined up by eye. Exports the table as
 figure; click any patch to flip it between black and white. Painted frames: darker than a cutoff. Transparent
 backgrounds: used directly. Grayscale can be squashed to 2 to 5 values. Flip, stack, and full-size PNG export.
 
-**Body.** A posable side-view mannequin for body mechanics (being built in phases; 1 to 3 are in: the mannequin with
-its timeline, onion skin and timing slider; preset motions; teaching overlays).
+**Body.** A posable side-view mannequin for anatomy and body mechanics. Three views, picked above the picture:
+**Mannequin** (pose it, play it), **Proportions** (a guide in head heights) and **Hands and feet** (a gesture sheet).
 
 - Posing. Joints: neck, spine, hips, and both shoulders, elbows, wrists, knees and ankles. Drag a body part to swing it
   from its joint, drag a wrist or ankle dot to pull the whole limb, drag the hip diamond to move the body (the feet stay
@@ -91,6 +92,10 @@ its timeline, onion skin and timing slider; preset motions; teaching overlays).
 - Motions to study: walk cycle (contact, down, passing, up; 12 frames a step, walking on the spot), pick something up
   (anticipation, hips back, grab, legs push, settle), raise a hand (anticipation, elbow leads, overshoot, settle), and a
   crouch-and-stretch to practise on. Each says under the buttons what it teaches.
+- Walks, runs and jumps: happy walk (10 frames a step, bouncy, chest out), sneak (24 frames a step, low, toe first),
+  tired walk (16 frames a step, slumped, feet dragging), run (8 frames a step, with an "in the air" pose), jump
+  (anticipation, push off, top, land, squash, settle) and stop short (the overlapping action demo: the body stops, the
+  arms carry on, swing back and settle). A picture that would run off the top or the side zooms out to fit.
 - Onion skin: the neighbouring stored poses or nearby frames, blue before and orange after.
 - Timing: the speed slider plays the motion faster or slower and shows where the poses would land; "Keep this timing"
   moves them there.
@@ -98,8 +103,19 @@ its timeline, onion skin and timing slider; preset motions; teaching overlays).
   it) down the spine and out through a leg, and says straight, C curve or S curve. **Balance** shows the centre of
   gravity, a plumb line under it and the stretch of ground the feet cover: green = over the feet, orange = only just,
   red = tipping, with the direction. **Pivots** marks every joint, a wedge for how far it is bent from rest, and the
-  arc the selected joint swings on.
-- Saves and opens a motion file, and saves the current frame as a PNG.
+  arc the selected joint swings on. **Joint limits** (on by default) draws the range a real joint has around the
+  selected joint, and puts a ring and "12 degrees past" on any joint bent further than that: orange up to 15 past, pink
+  beyond. It is a heads up, not a rule (breaking a joint for a frame is a real technique). **Muscles** draws the main
+  muscle groups as blobs that go red, short and fat when they bunch up (squash) and blue, long and thin when they are
+  pulled (stretch), and names what the selected joint does to them. **Hair and scarf** hangs a ponytail, a scarf and
+  a coat tail on the figure: they drag behind while it moves and swing on after it stops (follow through).
+- Proportions view: adult (7.5 heads), heroic (8.5), teen (7), child of about 8 (6), toddler (4), cartoon (3), chibi (2)
+  and lanky (9.5) standing in a row, each with a ruler of its own heads and a gold line at half its height. Options in
+  the side panel: all the same height, and all in the pose on the current frame.
+- Hands and feet view: eight hands (relaxed, open, fist, gripping, pointing, pinching, thumbs up, waving) and six feet
+  (flat, heel strike, push off, tiptoe, pointed, flexed), each with one line on what to notice. Green marks show what
+  touches the ground.
+- Saves and opens a motion file, and saves the current frame (or the guide, or the sheet) as a PNG.
 
 A motion file is small enough to write by hand, so you can author a motion for the artist and have her open it:
 
@@ -307,7 +323,7 @@ None of them need artwork: they generate their own stand-ins into `tests/out/`.
     node tests/test_app_ui.mjs           # Perspective mode in headless Chrome
     node tests/test_app_timing.mjs       # Timing mode
     node tests/test_app_camera.mjs       # Camera and Value modes, and their math against Python
-    node tests/test_app_body.mjs         # Body mode: mannequin math, presets, balance, posing, timeline, overlays
+    node tests/test_app_body.mjs         # Body mode: mannequin math, motions, balance, joint ranges, muscles, hands, feet, the three views
 
 The four browser tests need `npm i puppeteer-core` (it drives the Chrome or Edge already installed).
 
@@ -320,7 +336,12 @@ The four browser tests need `npm i puppeteer-core` (it drives the Chrome or Edge
 - Silhouette of line art: which closed shapes are "figure" is a guess when the figure leaves the frame; check the picture.
 - Anatomy: depends entirely on where the joints were placed. Foreshortening explains many flags.
 - Body mode: a flat side view. It cannot turn to face the camera, and the far arm hides behind the torso when it hangs
-  (grab its dots). Joints bend as far as you drag them: nothing warns about impossible angles yet. Balance uses average
+  (grab its dots). The joint ranges are for an average adult seen from the side, and a joint is never stopped, only
+  flagged. The muscles are a cartoon of the real thing: one blob per group, driven by one or two joint angles. Hair,
+  scarf and coat tail are simple chains with made-up weight; they pass in front of the body instead of wrapping round
+  it. The hands are flat palm views (a curled finger is just drawn shorter) and cannot be posed. The other bodies in the
+  proportion guide are for looking at: the motions only play on the adult. The library motions and every pose in them
+  were planned by a Claude, not an animator, so treat them as a starting point to push. Balance uses average
   adult body weights, ignores anything being carried, and only knows front and back. In a walk it honestly reads "tipping"
   for much of each step, because walking is falling and catching. The line of action is a fitted curve: a guide to
   compare poses with, not a judgement.
