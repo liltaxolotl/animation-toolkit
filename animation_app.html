@@ -78,8 +78,11 @@ input[type=number],input[type=text],select{width:100%;background:var(--bg);color
   <div class="side">
     <div class="card">
       <h2>Board</h2>
-      <div class="row"><button class="primary" id="pBoardBtn" style="flex:1">Upload a board</button><button id="pFit" title="Fit the canvas in the window">Fit</button></div>
-      <input type="file" id="pBoardFile" accept="image/*" hidden>
+      <div class="row"><button class="primary" id="pBoardBtn" style="flex:1" title="One picture, or pick several frames of a shot at once (PNG, JPG, PSD)">Upload frames</button><button id="pBlank" title="Take the picture away and keep the grid, to make a clean grid to draw on">Blank</button><button id="pFit" title="Fit the canvas in the window">Fit</button></div>
+      <div class="row" id="pSeqRow" style="display:none"><button id="pPrevB" title="Previous frame ( , )">&lt;</button><span id="pSeqLbl" class="muted" style="flex:1;text-align:center"></span><button id="pNextB" title="Next frame ( . )">&gt;</button></div>
+      <button id="pSeqCheck" style="display:none;width:100%" title="Finds the depth point on every frame and flags the frames where it jumps">Check every frame for jumps</button>
+      <div class="muted" id="pSeqInfo" style="white-space:pre-line"></div>
+      <input type="file" id="pBoardFile" accept="image/*,.psd" multiple hidden>
       <div class="sl"><label>Board fade</label><input type="range" id="pBoardOp" min="0" max="100" value="55"><output></output></div>
       <div class="muted" id="pCanvasInfo">Canvas 3840 x 1920</div>
     </div>
@@ -91,10 +94,17 @@ input[type=number],input[type=text],select{width:100%;background:var(--bg);color
         <button data-tool="V"><span class="dot" style="background:var(--green)"></span>Upright lines</button>
         <button data-tool="S">Select / move</button>
       </div>
-      <div class="muted" style="margin:6px 0">Drag over edges that should meet at one point. Two or more of a color give a vanishing point.</div>
+      <div class="muted" style="margin:6px 0">Drag over edges that should meet at one point, or just click where the vanishing point should be. Depth only = 1 point, depth + side = 2 point, depth + side + uprights = 3 point.</div>
+      <div class="row"><button id="pFind" style="flex:1" title="Looks for long straight strokes in the picture and the points they aim at">Find the lines for me</button></div>
+      <label class="chk" title="Marks the straight strokes that almost aim at a vanishing point but miss it"><input type="checkbox" id="pCheck">Check my drawing against the grid</label>
       <label class="chk"><input type="checkbox" id="pUseLines" checked>Camera follows my lines</label>
       <label class="chk"><input type="checkbox" id="pSolveLens" checked>Work out lens width from depth + side</label>
       <div class="row"><button id="pClearLines">Clear lines</button><button id="pUndo">Undo</button></div>
+    </div>
+    <div class="card">
+      <h2>Character height</h2>
+      <div class="row"><button data-tool="H" style="flex:1">Measure a character</button><button id="pClearPoles">Clear</button></div>
+      <div class="muted">Drag from the feet to the top of the head of one character. Then click anywhere on the floor to see how tall the same character is there.</div>
     </div>
     <div class="card">
       <h2>Lens</h2>
@@ -147,6 +157,7 @@ input[type=number],input[type=text],select{width:100%;background:var(--bg);color
       <label class="chk"><input type="checkbox" data-g="vps">Vanishing points</label>
       <label class="chk"><input type="checkbox" data-g="grid">Floor grid</label>
       <label class="chk"><input type="checkbox" data-g="rays">Depth lines</label>
+      <label class="chk"><input type="checkbox" data-g="walls">Uprights (walls)</label>
       <label class="chk"><input type="checkbox" data-g="props">Props</label>
       <label class="chk"><input type="checkbox" data-g="lines">My drawn lines (in the export)</label>
       <div class="sl"><label>Grid square</label><input type="range" id="pTile" min="0.25" max="4" step="0.25"><output></output></div>
@@ -169,7 +180,7 @@ input[type=number],input[type=text],select{width:100%;background:var(--bg);color
     <div class="card">
       <h2>Frames</h2>
       <div class="row"><button class="primary" id="tLoadBtn" style="flex:1">Load frames</button><button id="tFolderBtn" title="Pick a whole folder of numbered PNGs">Folder</button></div>
-      <input type="file" id="tFiles" accept="image/*" multiple hidden>
+      <input type="file" id="tFiles" accept="image/*,.psd" multiple hidden>
       <input type="file" id="tFolder" webkitdirectory hidden>
       <div class="muted" id="tInfo">Pick the numbered PNGs of one shot. They play in number order.</div>
     </div>
@@ -251,7 +262,7 @@ input[type=number],input[type=text],select{width:100%;background:var(--bg);color
       <div class="f2"><label>Zoom %</label><input type="number" id="cKZ" min="10" max="800" step="5"></div>
       <div class="f2"><label>Leaves</label><select id="cKE"><option value="inout">slow out, slow in</option><option value="in">slow out (speeds up)</option><option value="out">slow in (settles)</option><option value="linear">even speed</option></select></div>
       <div class="row"><button id="cImgBtn" style="flex:1">Load this key's drawing</button><button id="cImgClear" title="Remove the drawing">x</button></div>
-      <input type="file" id="cImg" accept="image/*" hidden>
+      <input type="file" id="cImg" accept="image/*,.psd" hidden>
       <div class="muted">X and Y are field pixels at 100%, right and down are positive. 200% zoom = pushed in to twice the size. A drawing shows inside its box so the keys can be lined up by eye.</div>
     </div>
   </div>
@@ -294,7 +305,7 @@ input[type=number],input[type=text],select{width:100%;background:var(--bg);color
     <div class="card">
       <h2>Frame</h2>
       <div class="row"><button class="primary" id="vLoadBtn" style="flex:1">Load frames</button><button id="vPrev">&lt;</button><button id="vNext">&gt;</button></div>
-      <input type="file" id="vFiles" accept="image/*" multiple hidden>
+      <input type="file" id="vFiles" accept="image/*,.psd" multiple hidden>
       <div class="muted" id="vInfo">Pick one frame or several. Arrow keys step through them.</div>
     </div>
     <div class="card">
@@ -428,19 +439,19 @@ const AT = (() => {
   function makeCamera(o) {
     const W = o.W || 3840, H = o.H || 1920, k = Math.max(o.k == null ? 1 : o.k, 1e-3), fov = o.fov || 60;
     return { C: (o.pos || [0,5,0]).slice(), R: o.R || anglesToR(o.yaw || 0, o.pitch || 0, o.roll || 0), k, fov, W, H,
-             f: (W/2) * k / Math.tan(Math.min(k * rad(fov/2), 1.5)), skew: o.skew || 0, shear: Math.tan(rad(o.skew || 0)), roll: o.roll || 0 };
+             f: (W/2) * k / Math.tan(Math.min(k * rad(fov/2), 1.5)), skew: o.skew || 0, shear: Math.tan(rad(o.skew || 0)), roll: o.roll || 0, ox: (o.shift && o.shift[0]) || 0, oy: (o.shift && o.shift[1]) || 0 };      // ox, oy: how far the lens centre sits from the middle of the picture (3 point drawings)
   }
   const toCam = (cam, P) => { const d = sub(P, cam.C); return [dot(cam.R[0], d), dot(cam.R[1], d), dot(cam.R[2], d)]; };
   function projectCam(cam, c) {
     const th = Math.atan2(Math.hypot(c[0], c[1]), c[2]), ph = Math.atan2(c[1], c[0]);
     const r = cam.f * Math.tan(Math.min(cam.k * th, 1.5)) / cam.k;
-    const u = cam.W/2 + r*Math.cos(ph), v = cam.H/2 - r*Math.sin(ph);
-    return [u + cam.shear * (v - cam.H/2), v];
+    const cx = cam.W/2 + cam.ox, cy = cam.H/2 + cam.oy, u = cx + r*Math.cos(ph), v = cy - r*Math.sin(ph);
+    return [u + cam.shear * (v - cy), v];
   }
   const project = (cam, P) => projectCam(cam, toCam(cam, P));
   function rayCam(cam, uv) {
-    const v = uv[1], u = uv[0] - cam.shear * (v - cam.H/2);
-    const x = u - cam.W/2, y = -(v - cam.H/2), r = Math.hypot(x, y);
+    const cx = cam.W/2 + cam.ox, cy = cam.H/2 + cam.oy, v = uv[1], u = uv[0] - cam.shear * (v - cy);
+    const x = u - cx, y = -(v - cy), r = Math.hypot(x, y);
     const th = Math.atan(r * cam.k / cam.f) / cam.k, ph = Math.atan2(y, x);
     return [Math.sin(th)*Math.cos(ph), Math.sin(th)*Math.sin(ph), Math.cos(th)];
   }
@@ -459,15 +470,36 @@ const AT = (() => {
     for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2, gm = g(m); if (a * gm <= 0) { hi = m; b = gm; } else { lo = m; a = gm; } }
     return (lo + hi) / 2;
   }
-  // vpA = depth (world z), vpB = side (world x, optional), vpV = uprights (world y, optional)
+  // Three vanishing points (depth, side, upright): the lens width and lens centre that put all three 90 degrees apart, or null.
+  // With a plain lens the centre is where the heights of the triangle cross; a bent or skewed lens is polished from there.
+  function solveThree(pA, pB, pV, o) {
+    const W = o.W || 3840, H = o.H || 1920, e1 = [pB[0] - pV[0], pB[1] - pV[1]], e2 = [pA[0] - pV[0], pA[1] - pV[1]], det = e1[0] * e2[1] - e1[1] * e2[0]; if (Math.abs(det) < 1e-9) return null;
+    const c1 = pA[0] * e1[0] + pA[1] * e1[1], c2 = pB[0] * e2[0] + pB[1] * e2[1], hx = (c1 * e2[1] - e1[1] * c2) / det, hy = (e1[0] * c2 - c1 * e2[0]) / det;
+    const f2 = -((pA[0] - hx) * (pB[0] - hx) + (pA[1] - hy) * (pB[1] - hy)); if (!(f2 > 0)) return null;
+    let q = [hx - W / 2, hy - H / 2, deg(2 * Math.atan(W / 2 / Math.sqrt(f2)))];
+    const F = q => { const c = makeCamera({ ...o, fov: q[2], shift: [q[0], q[1]], R: I3 }), a = rayCam(c, pA), b = rayCam(c, pB), v = rayCam(c, pV); return [dot(a, b), dot(a, v), dot(b, v)]; };
+    const det3 = m => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    for (let it = 0; it < 40; it++) { const f0 = F(q); if (Math.max(Math.abs(f0[0]), Math.abs(f0[1]), Math.abs(f0[2])) < 1e-10) break;
+      const J = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], st = [0.5, 0.5, 0.01]; for (let j = 0; j < 3; j++) { const q2 = q.slice(); q2[j] += st[j]; const f1 = F(q2); for (let i = 0; i < 3; i++) J[i][j] = (f1[i] - f0[i]) / st[j]; }
+      const d = det3(J); if (Math.abs(d) < 1e-30) break; const step = [0, 1, 2].map(j => det3(J.map((row, i) => row.map((v, k) => k === j ? -f0[i] : v))) / d);
+      q = [q[0] + step[0], q[1] + step[1], clamp(q[2] + clamp(step[2], -20, 20), 2, 170)]; }
+    const fe = F(q); return Math.max(Math.abs(fe[0]), Math.abs(fe[1]), Math.abs(fe[2])) < 1e-6 && q[2] > 2 && q[2] < 170 ? { fov: q[2], shift: [q[0], q[1]] } : null;
+  }
+  // vpA = depth (world z), vpB = side (world x, optional), vpV = uprights (world y, optional).
+  // Depth + side give the lens width. All three give the lens width and where the lens centre sits (shift).
   function cameraFromVPs(vpA, vpB, vpV, o) {
-    let fov = o.fov || 60, solved = false; const notes = [];
-    if (vpB && o.solveLens !== false) {
+    let fov = o.fov || 60, solved = false, shift = null; const notes = [];
+    if (vpB && vpV && o.solveLens !== false) {
+      const t = solveThree(vpA, vpB, vpV, o);
+      if (t) { fov = t.fov; shift = t.shift; solved = true; }
+      else notes.push('The three points cannot all be 90 degrees apart with any lens, so the upright point is left out.');
+    }
+    if (!shift && vpB && o.solveLens !== false) {
       const f = solveFov(vpA, vpB, o);
       if (f == null) notes.push('Depth and side points cannot be 90 degrees apart with any lens. Lens width left alone.');
       else { fov = f; solved = true; }
     }
-    const c0 = makeCamera({ ...o, fov, R: I3 }), zc = rayCam(c0, vpA); let xc, yc;
+    const c0 = makeCamera({ ...o, fov, shift, R: I3 }), zc = rayCam(c0, vpA); let xc, yc;
     if (vpB) {
       xc = rayCam(c0, vpB); xc = norm(sub(xc, mul(zc, dot(xc, zc)))); yc = cross(zc, xc);
       if (yc[1] < 0) { xc = mul(xc, -1); yc = mul(yc, -1); }
@@ -475,7 +507,7 @@ const AT = (() => {
       let g; if (vpV) { g = rayCam(c0, vpV); if (g[1] < 0) g = mul(g, -1); } else { const r = rad(o.roll || 0); g = [Math.sin(r), Math.cos(r), 0]; }
       yc = norm(sub(g, mul(zc, dot(g, zc)))); xc = cross(yc, zc);
     }
-    return { R: [[xc[0], yc[0], zc[0]], [xc[1], yc[1], zc[1]], [xc[2], yc[2], zc[2]]], fov, solved, notes };
+    return { R: [[xc[0], yc[0], zc[0]], [xc[1], yc[1], zc[1]], [xc[2], yc[2], zc[2]]], fov, solved, notes, shift };
   }
   // 2D: point closest to a bunch of drawn lines [{a:[x,y], b:[x,y]}]
   function lsqPoint(lines) {
@@ -568,7 +600,7 @@ const AT = (() => {
     push(pts[pts.length - 1]); if (seg.length > 1) out.push(seg); return out;
   }
   return { rad, deg, clamp, sub, add, mul, dot, cross, len, norm, basis, anglesToR, rToAngles, makeCamera, toCam, projectCam, project,
-           rayCam, ray, planePoint, vanishingPoint, solveFov, cameraFromVPs, lsqPoint, missOf, DEF, propLocal, propWorld, polyPieces };
+           rayCam, ray, planePoint, vanishingPoint, solveFov, solveThree, cameraFromVPs, lsqPoint, missOf, DEF, propLocal, propWorld, polyPieces };
 })();
 /*CORE-END*/
 </script>
@@ -705,6 +737,113 @@ const ValueMath = (() => {
   return { INK, morph, regions, outsideLabels, labelAt, silhouetteLines, otsu, posterize };
 })();
 /*VAL-END*/
+
+/*PSD-START*/
+// Reads the flattened picture out of a Photoshop file (the copy every PSD carries when it is saved with "Maximize Compatibility").
+// 8 or 16 bit, RGB or grayscale. Returns { w, h, data } with data = RGBA bytes, opaque, the way the artist sees the file on white.
+const Psd = (() => {
+  function read(buf) {
+    const d = new DataView(buf), u = new Uint8Array(buf); if (buf.byteLength < 30 || d.getUint32(0) !== 0x38425053) throw new Error('not a Photoshop file');
+    if (d.getUint16(4) !== 1) throw new Error('large document (PSB) files are not supported: save as PSD or PNG');
+    const ch = d.getUint16(12), h = d.getUint32(14), w = d.getUint32(18), depth = d.getUint16(22), mode = d.getUint16(24), bps = depth / 8, n = w * h;
+    if (depth !== 8 && depth !== 16) throw new Error(depth + ' bit Photoshop files are not supported: use 8 or 16 bit'); if (mode !== 3 && mode !== 1) throw new Error('only RGB and grayscale Photoshop files are supported');
+    let o = 26; for (let i = 0; i < 3; i++) o += 4 + d.getUint32(o);              // skip the colour table, the resources and the layers
+    const comp = d.getUint16(o), want = Math.min(ch, mode === 3 ? 3 : 1), planes = []; o += 2;
+    if (comp === 0) for (let c = 0; c < want; c++) { const pl = new Uint8Array(n); for (let i = 0; i < n; i++) pl[i] = u[o + (c * n + i) * bps]; planes.push(pl); }
+    else if (comp === 1) { let q = o + ch * h * 2;                                 // PackBits, one row at a time, channel after channel
+      for (let c = 0; c < want; c++) { const pl = new Uint8Array(n); let k = 0;
+        for (let y = 0; y < h; y++) { const end = q + d.getUint16(o + (c * h + y) * 2); let col = 0; const put = v => { if (col % bps === 0) pl[k++] = v; col++; };
+          while (q < end) { const m = d.getInt8(q++); if (m >= 0) for (let i = 0; i <= m; i++) put(u[q++]); else if (m !== -128) { const v = u[q++]; for (let i = 0; i < 1 - m; i++) put(v); } } }
+        planes.push(pl); } }
+    else throw new Error('this Photoshop file is packed in a way this reader does not know: save it with Maximize Compatibility on, or as PNG');
+    const data = new Uint8ClampedArray(n * 4); for (let i = 0; i < n; i++) { data[i * 4] = planes[0][i]; data[i * 4 + 1] = planes[want > 1 ? 1 : 0][i]; data[i * 4 + 2] = planes[want > 2 ? 2 : 0][i]; data[i * 4 + 3] = 255; }
+    return { w, h, data };
+  }
+  return { read };
+})();
+/*PSD-END*/
+
+/*LINES-START*/
+// Finds the long straight strokes in a picture and the points they aim at.
+// gray = Uint8Array of w * h values (0 black, 255 paper). Segments come back as { a: [x, y], b: [x, y], len }.
+const LineFind = (() => {
+  const D = Math.PI / 180;
+  function segments(gray, w, h, opt) {
+    opt = opt || {}; const diag = Math.ceil(Math.hypot(w, h)), minLen = opt.minLen || diag * 0.07, NT = 720, NR = 2 * diag + 1, T = opt.edge || 90;
+    const ori = new Float32Array(w * h).fill(NaN), acc = new Int32Array(NT * NR), cs = new Float32Array(NT), sn = new Float32Array(NT);
+    for (let t = 0; t < NT; t++) { cs[t] = Math.cos(t * 0.5 * D); sn[t] = Math.sin(t * 0.5 * D); }
+    { const tmp = new Float32Array(w * h), sm = new Float32Array(w * h); let src = gray;            // soften first: a hard pixel line has stair steps, and stair steps face the wrong way
+      for (let pass = 0; pass < 2; pass++) { for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; tmp[i] = (src[x > 0 ? i - 1 : i] + 2 * src[i] + src[x < w - 1 ? i + 1 : i]) / 4; }
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; sm[i] = (tmp[y > 0 ? i - w : i] + 2 * tmp[i] + tmp[y < h - 1 ? i + w : i]) / 4; } src = sm; }
+      gray = sm; }
+    const mag = new Float32Array(w * h), dir = new Float32Array(w * h);
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { const i = y * w + x;            // edges, and which way each one faces (a stroke has two: one facing each way)
+      const gx = gray[i - w + 1] + 2 * gray[i + 1] + gray[i + w + 1] - gray[i - w - 1] - 2 * gray[i - 1] - gray[i + w - 1], gy = gray[i + w - 1] + 2 * gray[i + w] + gray[i + w + 1] - gray[i - w - 1] - 2 * gray[i - w] - gray[i - w + 1], m = gx * gx + gy * gy;
+      if (m >= T * T) { mag[i] = m; dir[i] = Math.atan2(gy, gx); } }
+    for (let y = 2; y < h - 2; y++) for (let x = 2; x < w - 2; x++) { const i = y * w + x, m = mag[i]; if (!m) continue;      // keep only the crest of each edge, one pixel wide
+      const sx = Math.round(Math.cos(dir[i])), sy = Math.round(Math.sin(dir[i])); if (m < mag[i + sy * w + sx] || m <= mag[i - sy * w - sx]) continue;
+      let a = dir[i] / D; if (a < 0) a += 360; if (a >= 360) a -= 360; ori[i] = a;
+      const t0 = Math.round(a * 2); for (let k = -16; k <= 16; k++) { const t = ((t0 + k) % NT + NT) % NT; acc[t * NR + Math.round(x * cs[t] + y * sn[t]) + diag]++; } }      // every edge votes for the lines it could lie on: the ones within 8 degrees of the way it faces
+    const peaks = [], minV = minLen * 0.6;
+    for (let t = 0; t < NT; t++) for (let r = 1; r < NR - 1; r++) { const v = acc[t * NR + r]; if (v >= minV && v >= acc[t * NR + r - 1] && v >= acc[t * NR + r + 1]) peaks.push([v, t, r]); }
+    peaks.sort((u, v) => v[0] - u[0]); const kept = [];
+    for (const pk of peaks) { if (kept.length >= 400) break; if (!kept.some(q => { const dt = Math.abs(q[1] - pk[1]); return Math.min(dt, NT - dt) <= 5 && Math.abs(q[2] - pk[2]) <= 4; })) kept.push(pk); }
+    const turn = (o, th) => { const df = Math.abs(o - th) % 360; return df > 180 ? 360 - df : df; };
+    const walk = (nx, ny, rho, th, band) => {                                      // the unbroken stretches of one edge along a line: every crest pixel close to it that faces the same way
+      const ux = -ny, uy = nx, bx = rho * nx, by = rho * ny, runs = []; let run = null, gap = 0; const flush = () => { if (run && run.steps >= 8) runs.push(run); run = null; gap = 0; };
+      for (let q = -diag; q <= diag; q++) { const x = bx + ux * q, y = by + uy * q; if (x < 4 || y < 4 || x >= w - 4 || y >= h - 4) { flush(); continue; } let hit = false;
+        for (let k = -band; k <= band; k++) { const xi = Math.round(x + nx * k), yi = Math.round(y + ny * k), o = ori[yi * w + xi]; if (o === o && turn(o, th) < 14) { if (!run) run = { pts: [], steps: 0 }; run.pts.push(xi, yi); hit = true; } }
+        if (hit) { run.steps++; gap = 0; } else if (run && ++gap > 10) flush(); }
+      flush(); return runs; };
+    const fitLine = (pts, th0) => {                                                // the straight line that fits a run of edge pixels best (pts = x, y, x, y, ...), facing the way th0 does
+      const n = pts.length / 2; let mx = 0, my = 0; for (let i = 0; i < pts.length; i += 2) { mx += pts[i]; my += pts[i + 1]; } mx /= n; my /= n; let sxx = 0, sxy = 0, syy = 0; for (let i = 0; i < pts.length; i += 2) { const dx = pts[i] - mx, dy = pts[i + 1] - my; sxx += dx * dx; sxy += dx * dy; syy += dy * dy; }
+      const an = 0.5 * Math.atan2(2 * sxy, sxx - syy), ux = Math.cos(an), uy = Math.sin(an); let lo = 1e9, hi = -1e9, res = 0; for (let i = 0; i < pts.length; i += 2) { const dx = pts[i] - mx, dy = pts[i + 1] - my, t = dx * ux + dy * uy, e = dx * uy - dy * ux; res += e * e; if (t < lo) lo = t; if (t > hi) hi = t; }
+      let nx = -uy, ny = ux; if (nx * Math.cos(th0 * D) + ny * Math.sin(th0 * D) < 0) { nx = -nx; ny = -ny; } let th = Math.atan2(ny, nx) / D; if (th < 0) th += 360; return { mx, my, ux, uy, lo, hi, th, nx, ny, rms: Math.sqrt(res / n) }; };
+    const raw = [];
+    for (const [, t, r] of kept) for (const run of walk(cs[t], sn[t], r - diag, t * 0.5, 3)) { if (run.steps < minLen * 0.4) continue; let f = fitLine(run.pts, t * 0.5), cur = run;
+      for (let pass = 0; pass < 4; pass++) { let top = null;                       // walk again along the fitted line, closer in: it follows the stroke further than the first guess did
+        for (const r2 of walk(f.nx, f.ny, f.mx * f.nx + f.my * f.ny, f.th, 2)) { const m = (r2.pts.length >> 2) * 2, tc = (r2.pts[m] - f.mx) * f.ux + (r2.pts[m + 1] - f.my) * f.uy; if (tc > f.lo - 4 && tc < f.hi + 4 && (!top || r2.steps > top.steps)) top = r2; }
+        if (!top || top.steps < cur.steps * 0.9) break; cur = top; f = fitLine(cur.pts, f.th); }
+      const len = f.hi - f.lo; if (len >= minLen && cur.steps >= len * 0.7 && f.rms < 1.3) raw.push({ a: [f.mx + f.ux * f.lo, f.my + f.uy * f.lo], b: [f.mx + f.ux * f.hi, f.my + f.uy * f.hi], len, th: f.th % 180 }); }
+    raw.sort((u, v) => v.len - u.len); const out = [];                             // a stroke has two edges, and each can be found twice: keep the longest of each bundle
+    for (const g of raw) { const mx = (g.a[0] + g.b[0]) / 2, my = (g.a[1] + g.b[1]) / 2;
+      if (!out.some(k => { let df = Math.abs(k.th - g.th); if (df > 90) df = 180 - df; if (df > 3) return false; const dx = k.b[0] - k.a[0], dy = k.b[1] - k.a[1], n = k.len || 1, along = ((mx - k.a[0]) * dx + (my - k.a[1]) * dy) / n, off = Math.abs((mx - k.a[0]) * dy - (my - k.a[1]) * dx) / n; return off < 9 && along > -g.len / 2 && along < k.len + g.len / 2; })) out.push(g); }
+    return out.map(g => ({ a: g.a, b: g.b, len: g.len }));
+  }
+  const missDeg = (g, p) => { const dx = g.b[0] - g.a[0], dy = g.b[1] - g.a[1], n = Math.hypot(dx, dy) || 1, tx = p[0] - (g.a[0] + g.b[0]) / 2, ty = p[1] - (g.a[1] + g.b[1]) / 2, tn = Math.hypot(tx, ty) || 1; return Math.asin(Math.min(1, Math.abs(dx / n * ty / tn - dy / n * tx / tn))) / D; };
+  function cross(g, k) { const x1 = g.a[0], y1 = g.a[1], x2 = g.b[0], y2 = g.b[1], x3 = k.a[0], y3 = k.a[1], x4 = k.b[0], y4 = k.b[1], den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4); if (Math.abs(den) < 1e-9) return null;
+    const u = x1 * y2 - y1 * x2, v = x3 * y4 - y3 * x4; return [(u * (x3 - x4) - (x1 - x2) * v) / den, (u * (y3 - y4) - (y1 - y2) * v) / den]; }
+  function meet(list) {                                                            // the point closest to all the lines, longer lines counting more
+    let a11 = 0, a12 = 0, a22 = 0, b1 = 0, b2 = 0; for (const g of list) { const dx = g.b[0] - g.a[0], dy = g.b[1] - g.a[1], n = Math.hypot(dx, dy) || 1, nx = dy / n, ny = -dx / n, c = nx * g.a[0] + ny * g.a[1], wt = g.len || n; a11 += wt * nx * nx; a12 += wt * nx * ny; a22 += wt * ny * ny; b1 += wt * nx * c; b2 += wt * ny * c; }
+    const det = a11 * a22 - a12 * a12; return Math.abs(det) < 1e-7 * (a11 + a22) * (a11 + a22) ? null : [(b1 * a22 - b2 * a12) / det, (a11 * b2 - a12 * b1) / det];
+  }
+  function best(pool, tol) { let top = null; for (let i = 0; i < pool.length; i++) for (let j = i + 1; j < pool.length; j++) { const p = cross(pool[i], pool[j]); if (!p) continue; let score = 0; const inl = []; for (const g of pool) if (missDeg(g, p) < tol) { score += g.len; inl.push(g); } if (!top || score > top.score) top = { p, score, inl }; } return top; }
+  // Sorts segments into up to two vanishing points (A = the one nearest the middle of the picture = depth, B = side) and converging uprights (V).
+  // A point is only believed when at least 3 strokes carrying a quarter of the remaining ink agree on it: characters make straight lines too.
+  // flat = strokes that run parallel to each other (level edges, say), which get no point.
+  function vps(segs, w, h, opt) {
+    opt = opt || {}; const tol = opt.tol || 1.5, share = opt.share || 0.25, up = [], pool = [];
+    for (const g of segs) { const a = Math.abs(Math.atan2(g.b[0] - g.a[0], g.b[1] - g.a[1]) / D); (a < 20 || a > 160 ? up : pool).push(g); }
+    const found = [], flat = [], mid = [w / 2, h / 2], far = b => Math.hypot(b.p[0] - mid[0], b.p[1] - mid[1]), diag = Math.hypot(w, h); let rest = pool.slice();
+    const spread = inl => { let sx = 0, sy = 0, n = 0, e = 0; for (const g of inl) { const a = 2 * Math.atan2(g.b[1] - g.a[1], g.b[0] - g.a[0]); sx += g.len * Math.cos(a); sy += g.len * Math.sin(a); } const m = Math.atan2(sy, sx) / 2;       // how far from parallel a bundle is, in degrees
+      for (const g of inl) { let d = (Math.atan2(g.b[1] - g.a[1], g.b[0] - g.a[0]) - m) / D; d -= 180 * Math.round(d / 180); e += g.len * d * d; n += g.len; } return Math.sqrt(e / n); };
+    const miss = (inl, p) => { let e = 0, n = 0; for (const g of inl) { const d = missDeg(g, p); e += g.len * d * d; n += g.len; } return Math.sqrt(e / n); };
+    const parallel = b => far(b) > 12 * diag || (far(b) > 3 * diag && miss(b.inl, b.p) > 0.6 * spread(b.inl));        // a far point has to explain the strokes clearly better than "these are just parallel" does
+    for (let k = 0; k < 5 && found.length < 2; k++) { const total = rest.reduce((u, g) => u + g.len, 0), b = rest.length >= 3 ? best(rest, tol) : null; if (!b || b.inl.length < 3 || b.score < total * share) break;
+      b.p = meet(b.inl) || b.p; rest = rest.filter(g => !b.inl.includes(g)); if (parallel(b)) flat.push(...b.inl); else found.push(b); }       // strokes that are simply parallel (level edges, say) get no point
+    found.sort((u, v) => far(u) - far(v));
+    let V = [], vpV = null; if (found.length < 2 && up.length >= 3) { const b = best(up, tol); if (b && b.inl.length >= 3 && b.score >= up.reduce((u, g) => u + g.len, 0) * 0.5 && Math.abs(b.p[1] - h / 2) < 12 * h) { V = b.inl; vpV = meet(V) || b.p; } }
+    const A = found[0] ? found[0].inl : [], B = found[1] ? found[1].inl : [];
+    return { A, B, V, flat, vpA: found[0] ? found[0].p : null, vpB: found[1] ? found[1].p : null, vpV, rest: segs.filter(g => !A.includes(g) && !B.includes(g) && !V.includes(g)) };
+  }
+  // Which strokes sit on the grid and which drift: a stroke that nearly aims at a vanishing point (between lo and hi degrees off) is drifting.
+  function drift(segs, pts, lo, hi, cap) {
+    const on = [], off = []; for (const g of segs) { let bg = '', bd = 1e9; for (const n in pts) { const dg = missDeg(g, pts[n]); if (dg < bd) { bd = dg; bg = n; } } if (!bg) continue; if (bd <= lo) on.push(g); else if (bd < hi) off.push({ seg: g, group: bg, deg: bd }); }
+    off.sort((u, v) => v.deg * v.seg.len - u.deg * u.seg.len); return { on, off: off.slice(0, cap || 8), more: Math.max(0, off.length - (cap || 8)) };
+  }
+  return { segments, vps, drift, missDeg, meet };
+})();
+/*LINES-END*/
 
 /*BODY-START*/
 // The mannequin's math. Side view, facing right, measured in head heights, y up, ground at 0.
@@ -1051,6 +1190,11 @@ const BodyMath = (() => {
 <script>
 // ============================== shared helpers ==============================
 const $ = (s, el) => (el || document).querySelector(s), $$ = (s, el) => [...(el || document).querySelectorAll(s)];
+const isPsd = f => /\.psd$/i.test(f.name);
+async function psdCanvas(file) { const im = Psd.read(await file.arrayBuffer()), c = document.createElement('canvas'); c.width = im.w; c.height = im.h; c.getContext('2d').putImageData(new ImageData(im.data, im.w, im.h), 0, 0); return c; }
+const fileBitmap = async f => isPsd(f) ? createImageBitmap(await psdCanvas(f)) : createImageBitmap(f);       // any picture file, Photoshop files included
+const fileImage = f => isPsd(f) ? psdCanvas(f) : new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => rej(new Error('could not read ' + f.name)); img.src = URL.createObjectURL(f); });
+const PICS = /\.(png|jpe?g|webp|gif|bmp|psd)$/i;
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
 $$('#tabs .tab').forEach(t => t.onclick = () => {
   $$('#tabs .tab').forEach(x => x.classList.toggle('on', x === t));
@@ -1066,30 +1210,30 @@ const Persp = (() => {
     W: 3840, H: 1920, boardOp: 55, boardName: 'board',
     cam: { yaw: 0, pitch: 0, roll: 0, fov: 60, fish: 0, skew: 0, height: 5 },
     useLines: true, solveLens: true, snap: true, solid: false,
-    lines: [], props: [],
-    guide: { horizon: true, vps: true, grid: true, rays: true, props: true, lines: false, tile: 1, extent: 12, weight: 1 }
+    lines: [], props: [], figure: null, poles: [],
+    guide: { horizon: true, vps: true, grid: true, rays: true, walls: false, props: true, lines: false, tile: 1, extent: 12, weight: 1 }
   };
-  const UI = { tool: 'A', sel: null, view: { s: 0.3, x: 0, y: 0 }, drag: null, space: false };
+  const UI = { tool: 'A', sel: null, view: { s: 0.3, x: 0, y: 0 }, drag: null, space: false, note: '', found: null, check: false, drift: null, boards: [], bi: 0, hover: null, seq: null };
   let board = null, D = { cam: null, vp: {}, locked: {}, notes: [], solved: false }, undo = [], pid = 1;
   const cv = $('#pCanvas'), ctx = cv.getContext('2d'), stage = $('#pStage');
   const kOf = () => 1 - (S.cam.fish / 100) * 0.98;
 
   // ---------- state
-  const snapshot = () => JSON.stringify({ cam: S.cam, lines: S.lines, props: S.props }, (k, v) => k === '_px' ? undefined : v);
+  const snapshot = () => JSON.stringify({ cam: S.cam, lines: S.lines, props: S.props, figure: S.figure, poles: S.poles }, (k, v) => k === '_px' ? undefined : v);
   function pushUndo() { undo.push(snapshot()); if (undo.length > 60) undo.shift(); }
-  function doUndo() { if (!undo.length) return; const o = JSON.parse(undo.pop()); S.cam = o.cam; S.lines = o.lines; S.props = o.props; UI.sel = null; syncAll(); }
+  function doUndo() { if (!undo.length) return; const o = JSON.parse(undo.pop()); S.cam = o.cam; S.lines = o.lines; S.props = o.props; S.figure = o.figure || null; S.poles = o.poles || []; UI.sel = null; UI.note = ''; syncAll(); }
   function derive() {
     const grp = { A: [], B: [], V: [] }; S.lines.forEach(l => grp[l.g].push(l));
     D.vp = { A: AT.lsqPoint(grp.A), B: AT.lsqPoint(grp.B), V: AT.lsqPoint(grp.V) }; D.count = { A: grp.A.length, B: grp.B.length, V: grp.V.length };
-    D.notes = []; D.locked = {}; D.solved = false; let R = null;
+    D.notes = []; D.locked = {}; D.solved = false; D.shift = null; let R = null;
     const o = { W: S.W, H: S.H, k: kOf(), skew: S.cam.skew, fov: S.cam.fov, roll: S.cam.roll, solveLens: S.solveLens };
     if (S.useLines && D.vp.A) {
-      const r = AT.cameraFromVPs(D.vp.A, D.vp.B, D.vp.B ? null : D.vp.V, o); R = r.R; D.notes = r.notes; D.solved = r.solved;
+      const r = AT.cameraFromVPs(D.vp.A, D.vp.B, D.vp.V, o); R = r.R; D.notes = r.notes; D.solved = r.solved; D.shift = r.shift;
       const a = AT.rToAngles(R); S.cam.yaw = a.yaw; S.cam.pitch = a.pitch; D.locked.yaw = D.locked.pitch = true;
       if (D.vp.B || D.vp.V) { S.cam.roll = a.roll; D.locked.roll = true; }
       if (r.solved) { S.cam.fov = r.fov; D.locked.fov = true; }
     }
-    D.cam = AT.makeCamera({ pos: [0, S.cam.height, 0], R: R || undefined, yaw: S.cam.yaw, pitch: S.cam.pitch, roll: S.cam.roll, fov: S.cam.fov, k: o.k, skew: S.cam.skew, W: S.W, H: S.H });
+    D.cam = AT.makeCamera({ pos: [0, S.cam.height, 0], R: R || undefined, yaw: S.cam.yaw, pitch: S.cam.pitch, roll: S.cam.roll, fov: S.cam.fov, k: o.k, skew: S.cam.skew, W: S.W, H: S.H, shift: D.shift });
   }
 
   // ---------- drawing (canvas pixel space; used for the screen and for the export)
@@ -1120,8 +1264,22 @@ const Persp = (() => {
         c.lineWidth = lw(4); c.beginPath(); c.moveTo(vp[0] - r*1.7, vp[1]); c.lineTo(vp[0] + r*1.7, vp[1]); c.moveTo(vp[0], vp[1] - r*1.7); c.lineTo(vp[0], vp[1] + r*1.7); c.stroke();
       }
     }
+    if (G.walls) {                                // uprights along the side walls and the back wall of the floor grid
+      c.strokeStyle = 'rgba(31,170,92,0.75)'; c.lineWidth = lw(3); const e = G.extent, t = Math.max(G.tile, 1) * 2, hgt = 8;
+      for (let z = t; z <= 2 * e + 1e-6; z += t) for (const x of [-e, e]) line3(c, cam, [[x, 0, z], [x, hgt, z]], 8);
+      for (let x = -e + t; x < e - 1e-6; x += t) line3(c, cam, [[x, 0, 2 * e], [x, hgt, 2 * e]], 8);
+      for (const x of [-e, e]) line3(c, cam, [[x, hgt, t], [x, hgt, 2 * e]], 40); line3(c, cam, [[-e, hgt, 2 * e], [e, hgt, 2 * e]], 40);
+    }
     if (G.props) drawProps(c, cam, lw);
+    if (S.figure) { pole(c, cam, S.figure.x, S.figure.z, S.figure.h, '#e24bb5', lw); for (const q of S.poles) pole(c, cam, q[0], q[1], S.figure.h, '#0096c8', lw); }
     if (G.lines) drawUserLines(c, lw(6));
+  }
+  function pole(c, cam, x, z, hgt, col, lw) {      // a marker as tall as the measured character: feet line, body line, head circle
+    c.strokeStyle = col; c.lineWidth = lw(7); line3(c, cam, [[x, 0, z], [x, hgt, z]], 8); line3(c, cam, [[x - 0.7, 0, z], [x + 0.7, 0, z]], 4);
+    const top = AT.project(cam, [x, hgt, z]), chin = AT.project(cam, [x, hgt * (1 - 1 / 7.5), z]); if (top && chin) { c.beginPath(); c.arc((top[0] + chin[0]) / 2, (top[1] + chin[1]) / 2, Math.hypot(top[0] - chin[0], top[1] - chin[1]) / 2, 0, 7); c.stroke(); }
+  }
+  function heightAt(cam, g, uv) {                  // how high above the floor spot g the pixel uv is
+    const n = AT.norm([cam.C[0] - g[0], 0, cam.C[2] - g[2]]), r = AT.ray(cam, uv), den = AT.dot(r, n); if (Math.abs(den) < 1e-6) return null; const t = AT.dot(AT.sub(g, cam.C), n) / den; return t > 0 ? AT.add(cam.C, AT.mul(r, t))[1] : null;
   }
   function drawProps(c, cam, lw) {
     const geos = S.props.map(p => AT.propWorld(p, cam.C));
@@ -1160,6 +1318,14 @@ const Persp = (() => {
       if (vp && D.count[l.g] > 2) { const ms = AT.missOf(l, vp); if (ms.deg > 1.5) { const t = 'misses by ' + Math.round(ms.px) + ' px'; ctx.font = '600 ' + px(12) + 'px system-ui'; const w = ctx.measureText(t).width; const x = (l.a[0]+l.b[0])/2 + px(8), y = (l.a[1]+l.b[1])/2 - px(8); ctx.fillStyle = '#ffa23a'; ctx.fillRect(x - px(4), y - px(13), w + px(8), px(18)); ctx.fillStyle = '#231200'; ctx.fillText(t, x, y); } }
     }
     for (const g of ['A', 'B', 'V']) { const vp = D.count[g] > 1 ? D.vp[g] : null; if (!vp || Math.abs(vp[0]) > 1e6) continue; ctx.fillStyle = COL[g]; ctx.beginPath(); ctx.arc(vp[0], vp[1], px(6), 0, 7); ctx.fill(); ctx.font = '700 ' + px(12) + 'px system-ui'; ctx.fillText(NAME[g] + ' VP', vp[0] + px(10), vp[1] - px(8)); }
+    UI.drift = null;
+    if (UI.check && board) { if (!UI.found) UI.found = findSegs(board); const pts = {}; for (const g of ['A', 'B', 'V']) if (D.count[g] > 1 && D.vp[g]) pts[g] = D.vp[g];
+      const dr = UI.drift = LineFind.drift(UI.found, pts, 1.5, 9); ctx.lineCap = 'round';
+      for (const g of dr.on) { ctx.strokeStyle = 'rgba(47,191,113,.85)'; ctx.lineWidth = px(2.5); ctx.beginPath(); ctx.moveTo(g.a[0], g.a[1]); ctx.lineTo(g.b[0], g.b[1]); ctx.stroke(); }
+      for (const q of dr.off) { const g = q.seg, t = q.deg.toFixed(1) + '° off the ' + NAME[q.group].toLowerCase() + ' point'; ctx.strokeStyle = '#ff7a1a'; ctx.lineWidth = px(5); ctx.beginPath(); ctx.moveTo(g.a[0], g.a[1]); ctx.lineTo(g.b[0], g.b[1]); ctx.stroke();
+        ctx.font = '600 ' + px(12) + 'px system-ui'; const tw = ctx.measureText(t).width, x = (g.a[0] + g.b[0]) / 2 + px(8), y = (g.a[1] + g.b[1]) / 2 + px(20); ctx.fillStyle = '#ff7a1a'; ctx.fillRect(x - px(4), y - px(13), tw + px(8), px(18)); ctx.fillStyle = '#231200'; ctx.fillText(t, x, y); } }
+    if (UI.drag && UI.drag.kind === 'height') { const d = UI.drag; ctx.strokeStyle = '#e24bb5'; ctx.lineWidth = px(3); ctx.setLineDash([px(8), px(6)]); ctx.beginPath(); ctx.moveTo(d.p0[0], d.p0[1]); ctx.lineTo(d.p1[0], d.p1[1]); ctx.stroke(); ctx.setLineDash([]); }
+    else if (UI.tool === 'H' && S.figure && UI.hover) { const g = AT.planePoint(D.cam, UI.hover, 0); if (g) { ctx.save(); ctx.beginPath(); ctx.rect(0, 0, S.W, S.H); ctx.clip(); ctx.globalAlpha = 0.55; pole(ctx, D.cam, g[0], g[2], S.figure.h, '#0096c8', n => Math.max(1.2 / v.s, n * S.W / 3840)); ctx.restore(); } }
     ctx.strokeStyle = 'rgba(255,143,184,.9)'; ctx.lineWidth = px(1); ctx.strokeRect(0, 0, S.W, S.H);
     readout();
   }
@@ -1170,11 +1336,16 @@ const Persp = (() => {
     if (D.count.B) t += 'Side VP: ' + f(D.count.B > 1 ? D.vp.B : null) + '\n';
     if (D.count.V) t += 'Upright VP: ' + f(D.count.V > 1 ? D.vp.V : null) + '\n';
     t += 'Camera: lens ' + cam.fov.toFixed(1) + (D.solved ? ' (solved)' : '') + ', tilt ' + a.roll.toFixed(1) + ', bend k ' + cam.k.toFixed(2) + '\n';
+    if (D.shift) t += '3 point: the lens looks ' + Math.round(Math.abs(D.shift[0])) + ' px ' + (D.shift[0] < 0 ? 'left' : 'right') + ' and ' + Math.round(Math.abs(D.shift[1])) + ' px ' + (D.shift[1] < 0 ? 'above' : 'below') + ' the middle of the picture\n';
     if (hz) t += 'Horizon straight ahead at y ' + Math.round(AT.project(cam, [cam.C[0] + cam.R[2][0]*1e5, cam.C[1], cam.C[2] + cam.R[2][2]*1e5])[1]);
     if (D.notes.length) t += '\n' + D.notes.join('\n');
+    if (S.figure) t += '\nCharacter: ' + S.figure.h.toFixed(1) + ' ft tall' + (S.poles.length ? ', ' + S.poles.length + ' marker' + (S.poles.length > 1 ? 's' : '') : '');
+    if (UI.drift) t += '\nCheck: ' + UI.drift.on.length + ' strokes on the grid, ' + (UI.drift.off.length + UI.drift.more) + ' drifting' + (UI.drift.more ? ' (the ' + UI.drift.off.length + ' worst are marked)' : '') + (Object.keys(UI.drift.on).length + UI.drift.off.length ? '' : ' (it needs a vanishing point first)');
+    if (UI.note) t += '\n' + UI.note;
     $('#pReadout').textContent = t;
-    $('#pHint').textContent = UI.tool === 'S' ? 'Drag a prop to slide it on the floor. Shift-drag lifts it. Drag line ends to adjust. Delete removes. Wheel zooms, space-drag pans.'
-      : 'Drag along an edge in the drawing to add a ' + NAME[UI.tool].toLowerCase() + ' line. Wheel zooms, space-drag pans.';
+    $('#pHint').textContent = UI.tool === 'S' ? 'Drag a prop to slide it on the floor. Shift-drag lifts it. Drag line ends or a vanishing point to adjust. Delete removes. Wheel zooms, space-drag pans.'
+      : UI.tool === 'H' ? (S.figure ? 'Click on the floor to stand a same-height marker there. Drag feet to head again to re-measure.' : 'Drag from the feet to the top of the head of one character.')
+      : 'Click to put the ' + NAME[UI.tool].toLowerCase() + ' vanishing point there, or drag along an edge in the drawing to add ' + (UI.tool === 'V' ? 'an ' : 'a ') + NAME[UI.tool].toLowerCase() + ' line. Wheel zooms, space-drag pans.';
   }
 
   // ---------- view + pointer
@@ -1192,10 +1363,30 @@ const Persp = (() => {
     S.props.forEach((q, i) => { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; (q._px || []).forEach(seg => seg.forEach(u => { x0 = Math.min(x0, u[0]); x1 = Math.max(x1, u[0]); y0 = Math.min(y0, u[1]); y1 = Math.max(y1, u[1]); })); const ar = (x1-x0)*(y1-y0); if (p[0] > x0 && p[0] < x1 && p[1] > y0 && p[1] < y1 && ar < area) { area = ar; best = { kind: 'prop', i }; } });
     return best;
   }
+  function aim(from, p) {                           // turn lines to point at p: the end further from p stays where it is
+    for (const q of from) { const fa = Math.hypot(q.a[0] - p[0], q.a[1] - p[1]) >= Math.hypot(q.b[0] - p[0], q.b[1] - p[1]) ? q.a : q.b, len = Math.hypot(q.b[0] - q.a[0], q.b[1] - q.a[1]), dx = p[0] - fa[0], dy = p[1] - fa[1], n = Math.hypot(dx, dy) || 1; q.l.a = fa.slice(); q.l.b = [fa[0] + dx / n * Math.min(len, n * 0.9), fa[1] + dy / n * Math.min(len, n * 0.9)]; }
+  }
+  function placeVP(g, p) {                          // a click with a line tool: that vanishing point goes there
+    let mine = S.lines.filter(l => l.g === g);
+    if (mine.length < 2) { S.lines = S.lines.filter(l => l.g !== g); const W = S.W, H = S.H, left = p[0] < W / 2, an = g === 'A' ? [[W * 0.1, H * 0.94], [W * 0.9, H * 0.94], [W * (left ? 0.92 : 0.08), H * 0.08]] : g === 'B' ? [[W * (left ? 0.85 : 0.15), H * 0.15], [W * (left ? 0.85 : 0.15), H * 0.88]] : [[W * 0.15, H * (p[1] < H / 2 ? 0.85 : 0.15)], [W * 0.85, H * (p[1] < H / 2 ? 0.85 : 0.15)]];
+      for (const a of an) S.lines.push({ g, a, b: [a[0] + (p[0] - a[0]) * 0.35, a[1] + (p[1] - a[1]) * 0.35] }); }
+    else aim(mine.map(l => ({ l, a: l.a.slice(), b: l.b.slice() })), p);
+    S.useLines = true; UI.note = NAME[g] + ' vanishing point placed. Drag it, or its lines, to adjust.';
+  }
+  function endHeight(d) {
+    const cam = D.cam, px = 12 / UI.view.s;
+    if (Math.hypot(d.p1[0] - d.p0[0], d.p1[1] - d.p0[1]) >= px) { const feet = d.p0[1] > d.p1[1] ? d.p0 : d.p1, head = feet === d.p0 ? d.p1 : d.p0, g = AT.planePoint(cam, feet, 0), hgt = g && heightAt(cam, g, head);
+      if (!g || !(hgt > 0.05)) { UI.note = 'That did not land on the floor. Start at the feet, below the horizon, and drag up to the head.'; return; }
+      pushUndo(); S.figure = { x: g[0], z: g[2], h: hgt }; UI.note = ''; }
+    else if (!S.figure) UI.note = 'Drag from the feet to the top of the head of one character first.';
+    else { const g = AT.planePoint(cam, d.p1, 0); if (!g) { UI.note = 'That spot is above the horizon, so it is not on the floor.'; return; } pushUndo(); S.poles.push([g[0], g[2]]); UI.note = ''; }
+  }
   const snapv = v => S.snap ? Math.round(v * 4) / 4 : Math.round(v * 100) / 100;
   cv.addEventListener('pointerdown', e => {
     cv.setPointerCapture(e.pointerId); const p = toCanvas(e);
     if (e.button === 1 || e.button === 2 || UI.space) { UI.drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, x: UI.view.x, y: UI.view.y }; return; }
+    if (UI.tool === 'H') { UI.drag = { kind: 'height', p0: p, p1: p }; return; }
+    if (UI.tool === 'S') for (const g of ['A', 'B', 'V']) { const vp = D.count[g] > 1 ? D.vp[g] : null; if (vp && Math.abs(vp[0]) < 1e6 && Math.hypot(p[0] - vp[0], p[1] - vp[1]) < 12 / UI.view.s) { pushUndo(); UI.sel = null; UI.drag = { kind: 'vp', g, from: S.lines.filter(l => l.g === g).map(l => ({ l, a: l.a.slice(), b: l.b.slice() })) }; return; } }
     if (UI.tool !== 'S') { pushUndo(); S.lines.push({ g: UI.tool, a: p, b: p.slice() }); UI.sel = { kind: 'line', i: S.lines.length - 1 }; UI.drag = { kind: 'line', i: S.lines.length - 1, part: 'b', fresh: true }; draw(); return; }
     const h = hit(p); UI.sel = h ? { kind: h.kind, i: h.i } : null;
     if (h && h.kind === 'line') { pushUndo(); const l = S.lines[h.i]; UI.drag = { kind: 'line', i: h.i, part: h.part, p0: p, a0: l.a.slice(), b0: l.b.slice() }; }
@@ -1203,7 +1394,8 @@ const Persp = (() => {
     syncProps(); draw();
   });
   cv.addEventListener('pointermove', e => {
-    const d = UI.drag; if (!d) return; const p = toCanvas(e);
+    const d = UI.drag; if (!d) { if (UI.tool === 'H' && S.figure) { UI.hover = toCanvas(e); draw(); } return; } const p = toCanvas(e);
+    if (d.kind === 'height') d.p1 = p; else if (d.kind === 'vp') aim(d.from, p); else
     if (d.kind === 'pan') { UI.view.x = d.x + e.clientX - d.sx; UI.view.y = d.y + e.clientY - d.sy; }
     else if (d.kind === 'line') { const l = S.lines[d.i]; if (d.part === 'all') { const dx = p[0]-d.p0[0], dy = p[1]-d.p0[1]; l.a = [d.a0[0]+dx, d.a0[1]+dy]; l.b = [d.b0[0]+dx, d.b0[1]+dy]; } else l[d.part] = p; }
     else if (d.kind === 'prop') {
@@ -1216,7 +1408,7 @@ const Persp = (() => {
     }
     draw();
   });
-  const endDrag = () => { const d = UI.drag; UI.drag = null; if (d && d.kind === 'line' && d.fresh) { const l = S.lines[d.i]; if (Math.hypot(l.b[0]-l.a[0], l.b[1]-l.a[1]) < 12 / UI.view.s) { S.lines.splice(d.i, 1); UI.sel = null; undo.pop(); } } if (d) { syncSliders(); save(); draw(); } };
+  const endDrag = () => { const d = UI.drag; UI.drag = null; if (d && d.kind === 'line' && d.fresh) { const l = S.lines[d.i]; if (Math.hypot(l.b[0]-l.a[0], l.b[1]-l.a[1]) < 12 / UI.view.s) { const g = l.g, at = l.a.slice(); S.lines.splice(d.i, 1); UI.sel = null; placeVP(g, at); } } if (d && d.kind === 'height') endHeight(d); if (d) { syncSliders(); save(); draw(); } };
   cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
   cv.addEventListener('contextmenu', e => e.preventDefault());
   cv.addEventListener('wheel', e => { e.preventDefault(); const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, k = Math.exp(-e.deltaY * 0.0015), v = UI.view, s = AT.clamp(v.s * k, 0.02, 8); v.x = mx - (mx - v.x) * s / v.s; v.y = my - (my - v.y) * s / v.s; v.s = s; draw(); }, { passive: false });
@@ -1225,7 +1417,8 @@ const Persp = (() => {
     if (e.code === 'Space') { UI.space = true; e.preventDefault(); }
     if ((e.key === 'Delete' || e.key === 'Backspace') && UI.sel) { pushUndo(); (UI.sel.kind === 'line' ? S.lines : S.props).splice(UI.sel.i, 1); UI.sel = null; syncAll(); }
     if (e.key === 'z' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); doUndo(); }
-    const tk = { '1': 'A', '2': 'B', '3': 'V', 'v': 'S' }[e.key]; if (tk) setTool(tk);
+    const tk = { '1': 'A', '2': 'B', '3': 'V', 'v': 'S', 'h': 'H' }[e.key]; if (tk) setTool(tk);
+    if (e.key === ',') showBoard(UI.bi - 1); if (e.key === '.') showBoard(UI.bi + 1);
   });
   window.addEventListener('keyup', e => { if (e.code === 'Space') UI.space = false; });
   window.addEventListener('resize', () => { if ($('#mode-perspective').classList.contains('on')) draw(); });
@@ -1255,7 +1448,9 @@ const Persp = (() => {
   $('#pSolveLens').onchange = e => { S.solveLens = e.target.checked; syncSliders(); save(); draw(); };
   $('#pSnap').onchange = e => { S.snap = e.target.checked; save(); };
   $('#pSolid').onchange = e => { S.solid = e.target.checked; save(); draw(); };
-  $('#pClearLines').onclick = () => { if (!S.lines.length) return; pushUndo(); S.lines = []; UI.sel = null; syncAll(); };
+  $('#pClearLines').onclick = () => { if (!S.lines.length) return; pushUndo(); S.lines = []; UI.sel = null; UI.note = ''; syncAll(); };
+  $('#pClearPoles').onclick = () => { if (!S.figure) return; pushUndo(); S.figure = null; S.poles = []; UI.note = ''; syncAll(); };
+  $('#pFind').onclick = findLines; $('#pCheck').onchange = e => { UI.check = e.target.checked; if (UI.check && !board) UI.note = 'Upload a picture first: there is nothing to check.'; draw(); };
   $('#pUndo').onclick = doUndo;
   $('#pResetLens').onclick = () => { pushUndo(); S.cam = { yaw: 0, pitch: 0, roll: 0, fov: 60, fish: 0, skew: 0, height: 5 }; syncAll(); };
   // lens looks: a starting point for stylized rooms (very wide, lines that bow, a tilted camera)
@@ -1303,24 +1498,64 @@ const Persp = (() => {
   function syncAll() { syncSliders(); syncProps(); save(); draw(); }
 
   // ---------- board, export, scene files
-  function setBoard(img, name) { board = img; S.W = img.naturalWidth || img.width; S.H = img.naturalHeight || img.height; S.boardName = (name || 'board').replace(/\.[^.]+$/, ''); syncSliders(); fit(); }
-  function loadBoardFile(file) { const img = new Image(); img.onload = () => setBoard(img, file.name); img.src = URL.createObjectURL(file); }
+  function setBoard(img, name) { board = img; S.W = img.naturalWidth || img.width; S.H = img.naturalHeight || img.height; S.boardName = (name || 'board').replace(/\.[^.]+$/, ''); UI.found = null; UI.boards = [{ img, name: name || 'board' }]; UI.bi = 0; UI.seq = null; syncSeq(); syncSliders(); fit(); }
+  function showBoard(i) { if (UI.boards.length < 2 || i < 0 || i >= UI.boards.length) return; UI.bi = i; board = UI.boards[i].img; S.boardName = UI.boards[i].name.replace(/\.[^.]+$/, ''); UI.found = null; syncSeq(); syncSliders(); draw(); }
+  function syncSeq() { const n = UI.boards.length, many = n > 1; $('#pSeqRow').style.display = many ? '' : 'none'; $('#pSeqCheck').style.display = many ? '' : 'none'; if (many) $('#pSeqLbl').textContent = 'Frame ' + (UI.bi + 1) + ' of ' + n + ': ' + UI.boards[UI.bi].name; if (!UI.seq) $('#pSeqInfo').textContent = many ? 'The grid stays the same on every frame.' : ''; }
+  async function loadBoardFiles(list) {             // one picture, or the frames of a shot (they share one grid)
+    const files = [...list].filter(f => PICS.test(f.name)).sort((u, v) => u.name.localeCompare(v.name, undefined, { numeric: true })); if (!files.length) return; const got = [];
+    for (const f of files) { try { got.push({ img: await fileImage(f), name: f.name }); } catch (err) { UI.note = 'Could not open ' + f.name + ': ' + err.message; } }
+    if (!got.length) { draw(); return; } UI.note = ''; setBoard(got[0].img, got[0].name); UI.boards = got; syncSeq();
+  }
+  const loadBoardFile = f => loadBoardFiles([f]);
   $('#pBoardBtn').onclick = () => $('#pBoardFile').click();
-  $('#pBoardFile').onchange = e => { if (e.target.files[0]) loadBoardFile(e.target.files[0]); e.target.value = ''; };
+  $('#pBoardFile').onchange = e => { loadBoardFiles(e.target.files); e.target.value = ''; };
+  $('#pBlank').onclick = () => { board = null; UI.boards = []; UI.bi = 0; UI.found = null; UI.seq = null; S.boardName = 'blank'; UI.note = 'Blank frame, ' + S.W + ' x ' + S.H + '. Click with a line tool to place each vanishing point, then export the guide to draw on.'; syncSeq(); syncSliders(); fit(); };
+  $('#pPrevB').onclick = () => showBoard(UI.bi - 1); $('#pNextB').onclick = () => showBoard(UI.bi + 1);
   stage.addEventListener('dragover', e => e.preventDefault());
-  stage.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (!f) return; if (/json$/i.test(f.name)) f.text().then(t => loadScene(JSON.parse(t))); else loadBoardFile(f); });
+  stage.addEventListener('drop', e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (!f) return; if (/json$/i.test(f.name)) f.text().then(t => loadScene(JSON.parse(t))); else loadBoardFiles(e.dataTransfer.files); });
+  // ---------- finding the lines in the picture
+  function findSegs(img) {                          // the long straight strokes of a picture, in canvas pixels
+    const k = Math.min(1, 1600 / Math.max(S.W, S.H)), w = Math.round(S.W * k), h = Math.round(S.H * k), c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d', { willReadFrequently: true });
+    g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h); const d = g.getImageData(0, 0, w, h).data, gray = new Uint8Array(w * h); for (let i = 0; i < w * h; i++) gray[i] = (d[i * 4] * 77 + d[i * 4 + 1] * 150 + d[i * 4 + 2] * 29) >> 8;
+    return LineFind.segments(gray, w, h).map(q => ({ a: [q.a[0] / k, q.a[1] / k], b: [q.b[0] / k, q.b[1] / k], len: q.len / k }));
+  }
+  function findLines() {
+    if (!board) { UI.note = 'Upload a picture first: there is nothing to look for lines in.'; draw(); return; }
+    const segs = findSegs(board), r = LineFind.vps(segs, S.W, S.H); UI.found = segs; pushUndo(); S.lines = [];
+    for (const g of ['A', 'B', 'V']) r[g].slice().sort((u, v) => v.len - u.len).slice(0, 4).forEach(q => S.lines.push({ g, a: q.a.slice(), b: q.b.slice() }));
+    UI.sel = null; if (r.A.length) S.useLines = true;
+    UI.note = segs.length + ' long straight strokes found. ' + (r.A.length ? 'Depth point from ' + r.A.length + ' of them' + (r.B.length ? ', side point from ' + r.B.length : '') + (r.V.length ? ', uprights from ' + r.V.length : '') + '. Drag a line or a point to correct it, or Undo.'
+      : 'They do not agree on a vanishing point, so nothing was added. Mark it by hand: drag along edges, or click to place the point.') + '\nCharacters can fool this (arms and props line up by chance), so trust your eye over it.';
+    setTool('S'); syncAll();
+  }
+  async function checkSequence() {                  // the depth point on every frame, and the frames where it jumps away from its neighbours
+    const n = UI.boards.length; if (n < 2) return; const res = [], info = $('#pSeqInfo');
+    for (let i = 0; i < n; i++) { info.textContent = 'Looking at frame ' + (i + 1) + ' of ' + n + '...'; await new Promise(r => setTimeout(r, 0)); const r = LineFind.vps(findSegs(UI.boards[i].img), S.W, S.H); const near = r.vpA && Math.hypot(r.vpA[0] - S.W / 2, r.vpA[1] - S.H / 2) < 3 * Math.hypot(S.W, S.H); res.push({ name: UI.boards[i].name, vp: near ? r.vpA : null, lines: near ? r.A.length : 0 }); }      // a point many pictures away is too loose to compare
+    const tol = Math.hypot(S.W, S.H) * 0.04, med = a => { const b = a.slice().sort((u, v) => u - v), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; }; let flags = 0, worst = 0;
+    const guess = (nb, i, c) => { const sl = []; for (let a = 0; a < nb.length; a++) for (let b = a + 1; b < nb.length; b++) sl.push((nb[b].vp[c] - nb[a].vp[c]) / (nb[b].i - nb[a].i)); const m = sl.length ? med(sl) : 0; return med(nb.map(o => o.vp[c] - m * (o.i - i))); };      // where the neighbours say this frame's point should be: a steady slide through them, ignoring one that is out of line
+    res.forEach((q, i) => { q.i = i; });
+    res.forEach((q, i) => { const nb = res.filter((o, j) => j !== i && Math.abs(j - i) <= 4 && o.vp); q.flag = '';
+      if (!q.vp) { if (nb.length >= 2) q.flag = 'no depth point found here, though its neighbours have one'; }
+      else if (nb.length >= 2) { q.jump = Math.hypot(q.vp[0] - guess(nb, i, 0), q.vp[1] - guess(nb, i, 1)); worst = Math.max(worst, q.jump); if (q.jump > tol) q.flag = 'the depth point is ' + Math.round(q.jump) + ' px away from where its neighbours put it'; }
+      if (q.flag) flags++; });
+    UI.seq = res; const have = res.filter(q => q.vp).length;
+    info.textContent = !have ? 'No frame gave a clear depth point, so there is nothing to compare. Mark the grid by hand and flip through the frames instead.'
+      : (flags ? flags + ' of ' + n + ' frames to look at:\n' + res.map((q, i) => q.flag ? 'Frame ' + (i + 1) + ' (' + q.name + '): ' + q.flag : '').filter(Boolean).join('\n') : 'All ' + n + ' frames agree: the depth point stays within ' + Math.round(worst) + ' px of its neighbours.')
+        + '\nA camera move slides the point smoothly, and that is fine: only sudden jumps are flagged.';
+  }
+  $('#pSeqCheck').onclick = checkSequence;
   function guideCanvas() { derive(); const c = document.createElement('canvas'); c.width = S.W; c.height = S.H; drawGuide(c.getContext('2d'), D.cam, 1); return c; }
   $('#pExport').onclick = () => guideCanvas().toBlob(b => download(b, S.boardName + '_guide.png'), 'image/png');
   const clean = q => { const o = {}; for (const k in q) if (k !== '_px' && k !== 'id') o[k] = q[k]; return o; };
   function sceneJSON() {
     derive(); const cam = D.cam, a = AT.rToAngles(cam.R), r4 = v => Math.round(v * 1e6) / 1e6;
-    return { canvas: [S.W, S.H], camera: { pos: cam.C, fov: r4(cam.fov), k: r4(cam.k), roll: r4(a.roll), yaw: r4(a.yaw), pitch: r4(a.pitch), skew: S.cam.skew, R: cam.R.map(r => r.map(r4)) },
+    return { canvas: [S.W, S.H], camera: { pos: cam.C, fov: r4(cam.fov), k: r4(cam.k), roll: r4(a.roll), yaw: r4(a.yaw), pitch: r4(a.pitch), skew: S.cam.skew, R: cam.R.map(r => r.map(r4)), ...(cam.ox || cam.oy ? { shift: [r4(cam.ox), r4(cam.oy)] } : {}) },
              floor: [-S.guide.extent, S.guide.extent, 0.25, 2 * S.guide.extent], props: S.props.map(clean),
-             app: { lines: S.lines, cam: S.cam, guide: S.guide, useLines: S.useLines, solveLens: S.solveLens } };
+             app: { lines: S.lines, cam: S.cam, guide: S.guide, useLines: S.useLines, solveLens: S.solveLens, figure: S.figure, poles: S.poles } };
   }
   function loadScene(o) {
     pushUndo();
-    if (o.app) { S.lines = o.app.lines || []; Object.assign(S.cam, o.app.cam || {}); Object.assign(S.guide, o.app.guide || {}); S.useLines = o.app.useLines !== false; S.solveLens = o.app.solveLens !== false; }
+    if (o.app) { S.lines = o.app.lines || []; Object.assign(S.cam, o.app.cam || {}); Object.assign(S.guide, o.app.guide || {}); S.useLines = o.app.useLines !== false; S.solveLens = o.app.solveLens !== false; S.figure = o.app.figure || null; S.poles = o.app.poles || []; }
     else {
       S.lines = [];
       if (o.lines && o.vanishing_points) {        // a perspective_check JSON: bring its grouped lines in
@@ -1348,8 +1583,8 @@ const Persp = (() => {
   const hp = new URLSearchParams(location.hash.slice(1));
   if (hp.get('scene')) { try { loadScene(JSON.parse(hp.get('scene'))); undo = []; } catch (e) {} }
   if (hp.get('board')) { const img = new Image(); img.onload = () => setBoard(img, hp.get('board').split('/').pop()); img.src = hp.get('board'); }
-  setTool(hp.get('tool') || 'A'); syncAll(); fit();
-  return { S, UI, D: () => D, draw, fit, loadScene, sceneJSON, guideCanvas, setBoard, addProp, setTool };
+  setTool(hp.get('tool') || 'A'); syncSeq(); syncAll(); fit();
+  return { S, UI, D: () => D, draw, fit, loadScene, sceneJSON, guideCanvas, setBoard, addProp, setTool, findLines, findSegs, checkSequence, showBoard };
 })();
 </script>
 <script>
@@ -1420,11 +1655,11 @@ const Timing = (() => {
   const natural = s => (s.match(/\d+/g) || ['0']).map(Number);
   function cmpName(a, b) { const x = natural(a.name), y = natural(b.name); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return a.name.localeCompare(b.name); }
   async function loadFiles(list) {
-    const files = [...list].filter(f => /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)).sort(cmpName);
+    const files = [...list].filter(f => PICS.test(f.name)).sort(cmpName);
     if (!files.length) return;
     stop(); T.frames = []; T.cur = 0; $('#tInfo').textContent = 'Loading ' + files.length + ' frames...';
     for (const f of files) {
-      const bmp = await createImageBitmap(f), k = Math.min(1, 1600 / bmp.width);
+      const bmp = await fileBitmap(f), k = Math.min(1, 1600 / bmp.width);
       const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
       const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
       T.frames.push({ name: f.name, img: c, w: bmp.width, h: bmp.height, hold: 2, mark: '', tint: {}, ink: inkOf(c) }); bmp.close && bmp.close();
@@ -1629,7 +1864,7 @@ const Timing = (() => {
   $('#tLoadBtn').onclick = () => $('#tFiles').click(); $('#tFolderBtn').onclick = () => $('#tFolder').click();
   $('#tFiles').onchange = e => { loadFiles(e.target.files); e.target.value = ''; }; $('#tFolder').onchange = e => { loadFiles(e.target.files); e.target.value = ''; };
   $('#tStage').addEventListener('dragover', e => e.preventDefault());
-  $('#tStage').addEventListener('drop', e => { e.preventDefault(); const fs = [...e.dataTransfer.files], au = fs.find(f => /^audio|\.(wav|mp3|m4a|ogg|flac)$/i.test(f.type + f.name)); if (au) loadAudio(au); if (fs.some(f => /^image/.test(f.type))) loadFiles(fs); });
+  $('#tStage').addEventListener('drop', e => { e.preventDefault(); const fs = [...e.dataTransfer.files], au = fs.find(f => /^audio|\.(wav|mp3|m4a|ogg|flac)$/i.test(f.type + f.name)); if (au) loadAudio(au); if (fs.some(f => /^image/.test(f.type) || isPsd(f))) loadFiles(fs); });
   $('#tPlay').onclick = () => T.playing ? stop() : play();
   $('#tLoop').onchange = e => T.loop = e.target.checked;
   $('#tFps').onchange = e => { T.fps = +e.target.value; analyseAudio(); T.ppf = 0; sync(); };
@@ -1807,7 +2042,7 @@ const Camera = (() => {
   $$('[data-cmove]').forEach(b => b.onclick = () => { const m = b.dataset.cmove;
     setKeys([{ frame: 1, x: 0, y: 0, zoom: 1, ease: 'inout' }, { frame: 49, x: m === 'push' ? 0 : Math.round(C.W / 2), y: 0, zoom: m === 'pan' ? 1 : 1.5, ease: 'inout' }]); C.sel = 1; sync(); });
   $('#cImgBtn').onclick = () => $('#cImg').click();
-  async function setImage(i, file) { const bmp = await createImageBitmap(file), k = Math.min(1, 1600 / bmp.width), c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  async function setImage(i, file) { const bmp = await fileBitmap(file), k = Math.min(1, 1600 / bmp.width), c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
     const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height); C.keys[i].img = c; sync(); }
   $('#cImg').onchange = e => { if (e.target.files[0]) setImage(C.sel, e.target.files[0]); e.target.value = ''; };
   $('#cImgClear').onclick = () => { delete selKey().img; sync(); };
@@ -1854,10 +2089,10 @@ const Value = (() => {
   const natural = s => (s.match(/\d+/g) || ['0']).map(Number);
   const cmpName = (a, b) => { const x = natural(a.name), y = natural(b.name); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return a.name.localeCompare(b.name); };
   async function loadFiles(list) {
-    const files = [...list].filter(f => /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name)).sort(cmpName); if (!files.length) return;
+    const files = [...list].filter(f => PICS.test(f.name)).sort(cmpName); if (!files.length) return;
     Vs.frames = []; Vs.cur = 0; $('#vInfo').textContent = 'Loading...';
     for (const f of files) {
-      const bmp = await createImageBitmap(f), k = Math.min(1, 1600 / bmp.width), c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+      const bmp = await fileBitmap(f), k = Math.min(1, 1600 / bmp.width), c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
       c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);                       // kept with its transparency
       Vs.frames.push({ name: f.name, file: f, img: c, w: bmp.width, h: bmp.height, marks: [] }); bmp.close && bmp.close();
     }
@@ -1944,7 +2179,7 @@ const Value = (() => {
 
   // ---------- exports (worked out again from the file at full size)
   async function exportCanvas(only) {
-    const fr = Vs.frames[Vs.cur]; if (!fr) return null; const bmp = await createImageBitmap(fr.file), W = bmp.width, H = bmp.height, sil = maskCanvas(R, W, H);
+    const fr = Vs.frames[Vs.cur]; if (!fr) return null; const bmp = await fileBitmap(fr.file), W = bmp.width, H = bmp.height, sil = maskCanvas(R, W, H);
     if (only) return sil; const g2 = grayCanvas(bmp, W, H), gapx = Math.max(8, Math.floor(W / 200)), c = document.createElement('canvas'); c.width = W * 2 + gapx; c.height = H;
     const g = c.getContext('2d'); g.fillStyle = '#ff78aa'; g.fillRect(0, 0, c.width, H); g.drawImage(sil, 0, 0); g.drawImage(g2, W + gapx, 0); return c;
   }

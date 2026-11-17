@@ -16,6 +16,7 @@ const cams = [
   { pos: [0, 5, 0], yaw: 0, pitch: 0, roll: 0, fov: 60, k: 1, skew: 0 },
   { pos: [1, 4, -2], yaw: 12, pitch: -8, roll: 7, fov: 95, k: 0.6, skew: 5 },
   { pos: [-2, 6, 1], yaw: -40, pitch: 15, roll: -12, fov: 150, k: 0.05, skew: -10 },
+  { pos: [0.5, 5, 0], yaw: 20, pitch: -25, roll: 3, fov: 70, k: 0.8, skew: 4, shift: [310, -140] },     // a lens centre off the middle (3 point)
 ];
 const pts = [[2, 1, 9], [-3, 0, 6], [0.5, 7, 12], [4, 2, 3], [-1, 0.5, 20]];
 const py = `
@@ -34,9 +35,15 @@ for c in cams:
 vz, vx = [2500.0, 700.0], [-3000.0, 820.0]
 c2, notes = S.camera_from_vps(vz, vx, W=3840, H=1920)
 out.append(dict(fov=c2.fov, R=c2.R.tolist()))
+for t in json.loads(sys.argv[3]):
+    c3, n3 = S.camera_from_vps(t['A'], t['B'], W=3840, H=1920, k=t['k'], skew=t['skew'], vp_up=t['V'])
+    out.append(dict(fov=c3.fov, R=c3.R.tolist(), shift=[c3.ox, c3.oy]))
 print(json.dumps(out))
 `;
-const res = JSON.parse(execFileSync('python', ['-c', py, JSON.stringify(cams), JSON.stringify(pts)], { encoding: 'utf8' }));
+// three point drawings: cameras whose lens centre is off the middle, and the three vanishing points they give
+const threeTruth = [{ yaw: 25, pitch: -30, roll: 4, fov: 80, k: 1, skew: 0, shift: [200, -120] }, { yaw: -35, pitch: 22, roll: -6, fov: 65, k: 0.7, skew: 5, shift: [-260, 90] }];
+const three = threeTruth.map(t => { const c = AT.makeCamera({ ...t, pos: [0, 5, 0], W: 3840, H: 1920 }); return { A: AT.vanishingPoint(c, [0, 0, 1]), B: AT.vanishingPoint(c, [1, 0, 0]), V: AT.vanishingPoint(c, [0, 1, 0]), k: t.k, skew: t.skew, cam: c }; });
+const res = JSON.parse(execFileSync('python', ['-c', py, JSON.stringify(cams), JSON.stringify(pts), JSON.stringify(three.map(t => ({ A: t.A, B: t.B, V: t.V, k: t.k, skew: t.skew })))], { encoding: 'utf8' }));
 
 let fails = 0;
 const close = (a, b, tol) => Math.abs(a - b) <= tol;
@@ -63,8 +70,15 @@ cams.forEach((c, i) => {
   check(`camera ${i + 1}: angles survive a round trip`, close(a.yaw, c.yaw, 1e-6) && close(a.pitch, c.pitch, 1e-6) && close(a.roll, c.roll, 1e-6));
 });
 const two = AT.cameraFromVPs([2500, 700], [-3000, 820], null, { W: 3840, H: 1920, k: 1, skew: 0, fov: 60 });
-check('two vanishing points: solved lens width matches Python', close(two.fov, res[3].fov, 1e-6), `${two.fov.toFixed(3)} vs ${res[3].fov.toFixed(3)}`);
-check('two vanishing points: rotation matches Python', two.R.flat().every((v, k) => close(v, res[3].R.flat()[k], 1e-7)));
+const r2 = res[cams.length];
+check('two vanishing points: solved lens width matches Python', close(two.fov, r2.fov, 1e-6), `${two.fov.toFixed(3)} vs ${r2.fov.toFixed(3)}`);
+check('two vanishing points: rotation matches Python', two.R.flat().every((v, k) => close(v, r2.R.flat()[k], 1e-7)));
+three.forEach((t, i) => { const tr = threeTruth[i], got = AT.cameraFromVPs(t.A, t.B, t.V, { W: 3840, H: 1920, k: t.k, skew: t.skew, fov: 60 }), pyr = res[cams.length + 1 + i], kind = t.k === 1 ? 'plain lens' : 'bent, skewed lens';
+  check(`three vanishing points (${kind}): the lens width and lens centre come back`, got.solved && got.shift && close(got.fov, tr.fov, 1e-3) && close(got.shift[0], tr.shift[0], 0.05) && close(got.shift[1], tr.shift[1], 0.05), got.shift ? `lens ${got.fov.toFixed(3)}, centre ${got.shift.map(v => v.toFixed(2))}` : got.notes.join(' '));
+  check(`three vanishing points (${kind}): the camera faces the same way`, got.R.flat().every((v, k) => close(v, t.cam.R.flat()[k], 1e-5)));
+  check(`three vanishing points (${kind}): matches Python`, close(got.fov, pyr.fov, 1e-5) && close(got.shift[0], pyr.shift[0], 1e-3) && close(got.shift[1], pyr.shift[1], 1e-3) && got.R.flat().every((v, k) => close(v, pyr.R.flat()[k], 1e-6))); });
+const flatTri = AT.cameraFromVPs([1000, 900], [3000, 900], [2000, 890], { W: 3840, H: 1920, k: 1, skew: 0, fov: 60 });
+check('three points that no lens can make square: says so, and falls back to depth + side', !flatTri.shift && flatTri.solved && /upright point is left out/.test(flatTri.notes.join(' ')));
 const vp = AT.lsqPoint([{ a: [0, 0], b: [100, 100] }, { a: [0, 200], b: [100, 100] }, { a: [50, 0], b: [80, 60] }]);
 check('line intersection: three lines through (100,100)', close(vp[0], 100, 1e-6) && close(vp[1], 100, 1e-6));
 

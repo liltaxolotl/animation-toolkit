@@ -32,7 +32,10 @@ The app needs nothing installed: open `animation_app.html` in Chrome or Edge. It
 
 | The artist says | Use |
 |---|---|
-| "Is my perspective right?" / "find the vanishing points" | `perspective_check.py`, or Perspective mode in the app to mark it by hand |
+| "Is my perspective right?" / "find the vanishing points" | Perspective mode in the app ("Find the lines for me", then "Check my drawing against the grid"), or `perspective_check.py` for a saved report |
+| "Give me a clean 1, 2 or 3 point grid to draw over" | Perspective mode: Blank, then click where each vanishing point goes, then Export guide PNG |
+| "Is this character the right size back there?" | Perspective mode: Measure a character |
+| "Does the perspective hold across this shot?" | Perspective mode: upload all the frames, then "Check every frame for jumps" |
 | "Block out this room / prop so I can draw over it" | `scene_render.py`, or the props in Perspective mode |
 | "Make me an inbetween" | `inbetween.py` |
 | "Does this shot move right?" (arcs, spacing, pops) | `motion_check.py` |
@@ -53,14 +56,34 @@ comment at the top of the file, for every option.
 
 ## The app: `animation_app.html`
 
-One self-contained file, five tabs. Load files with the buttons or by dragging them onto the picture.
+One self-contained file, five tabs. Load files with the buttons or by dragging them onto the picture. Every tab that
+takes pictures takes PNG, JPG and PSD (the flattened picture inside the PSD; layers are not read).
 
-**Perspective.** Load a board. Drag lines along edges that go back in space: two or more lines per direction give a
-vanishing point, and two vanishing points give the horizon and the lens. Sliders: Dutch tilt, fisheye, lens width,
-stylized skew, with one-click looks (straight, wide, bendy, fisheye, high, low). Add 3D blockout props that sit on the
-perspective: boxes, cylinders, bottles, jars, shelves, cabinets, doors with a real hinge swing. Exports a transparent
-guide PNG at full canvas size, and saves or loads a scene JSON (the same format `scene_render.py` reads; it also opens
-the `_check.json` from `perspective_check.py`).
+**Perspective.** Load a board, the frames of a whole shot, or start from a blank frame. The grid follows the drawing's
+own angles: nothing is ever "corrected".
+
+- Marking by hand. Three line tools: depth, side, upright. Drag along an edge, or just click where the vanishing point
+  should be (the app lays the lines for you; click again to move the point). Depth only = 1 point, depth + side =
+  2 point (the horizon and the lens width come from them), depth + side + uprights = 3 point (the lens centre moves off
+  the middle of the picture to fit all three). With the Select tool, drag a line, a line end or a vanishing point.
+- **Find the lines for me.** Finds the long straight strokes in the picture, groups the ones that agree on a point, and
+  lays up to four lines per group for you to adjust. Strokes that are simply parallel (level edges) get no point. If
+  the strokes do not agree, it adds nothing and says so.
+- **Check my drawing against the grid.** Strokes that sit on the grid turn green; strokes that nearly aim at a
+  vanishing point but miss it turn orange with how many degrees off they are (the eight worst). Lines that have nothing
+  to do with a vanishing point are left alone.
+- **Character height.** Drag from the feet to the top of the head of one character, then click anywhere on the floor:
+  a marker of the same height stands there, so a character further back or closer can be sized against it.
+- **A shot.** Upload several frames at once: they load in name order on one grid, with < and > (or , and .) to step
+  through. "Check every frame for jumps" finds the depth point on each frame and lists the frames where it jumps away
+  from where its neighbours put it. A steady slide (a camera move) passes.
+- Lens sliders: Dutch tilt, fisheye, lens width, stylized skew, with one-click looks (straight, wide, bendy, fisheye,
+  high, low).
+- 3D blockout props that sit on the perspective: boxes, cylinders, bottles, jars, shelves, cabinets, doors with a real
+  hinge swing.
+- Guide layers (tick boxes): horizon, vanishing points, floor grid, depth lines, uprights (walls), props, my drawn
+  lines. Exports a transparent guide PNG at full canvas size, and saves or loads a scene JSON (the same format
+  `scene_render.py` reads; it also opens the `_check.json` from `perspective_check.py`).
 
 **Timing.** Load a frame sequence. Plays at 24 fps (12, 25, 30 too), everything on 1s, 2s or 3s, with a hold per
 drawing. Onion skin with separate before and after counts. Mark keys, breakdowns and inbetweens (K, B, I); the timing
@@ -304,6 +327,8 @@ Use whichever the artist asked for.
         value.py             silhouette and grayscale        (mirrored in the app: VAL block)
         anatomy.py           rigs and checks
     (app only: BODY block)   the mannequin math for Body mode, no Python twin
+    (app only: PSD block)    reads the flattened picture out of a Photoshop file
+    (app only: LINES block)  finds straight strokes and vanishing points in the browser (lines.py is the Python one; they are separate)
     examples/                a sample scene, blank landmark files
     tests/                   see below
     samples/ out/ tools/     git-ignored: artwork, results, Rhubarb
@@ -324,12 +349,27 @@ None of them need artwork: they generate their own stand-ins into `tests/out/`.
     node tests/test_app_timing.mjs       # Timing mode
     node tests/test_app_camera.mjs       # Camera and Value modes, and their math against Python
     node tests/test_app_body.mjs         # Body mode: mannequin math, motions, balance, joint ranges, muscles, hands, feet, the three views
+    node tests/test_app_frames.mjs       # PSD files, finding lines, checking a drawing, 1, 2 and 3 point grids, character height, a shot's frames
 
-The four browser tests need `npm i puppeteer-core` (it drives the Chrome or Edge already installed).
+The five browser tests need `npm i puppeteer-core` (it drives the Chrome or Edge already installed).
 
 ## Known limits (say these out loud when they apply)
 
 - Vanishing points: character linework can look like perspective. Trust the `_check.png`, not just the numbers.
+- Find the lines for me (app): it only sees long, straight, fairly clean strokes (about 7% of the picture's diagonal or
+  longer). Sketchy, curved or bowed lines are skipped, so a fisheye room has to be marked by hand. Arms, props and
+  panel borders can line up by chance and pull a point off. It never gives depth + side + uprights at once; add the
+  third by hand. Tested on generated rooms only, not yet on real boards.
+- Check my drawing: it judges straight strokes against the vanishing points, nothing else. A stroke more than 9 degrees
+  off is assumed to be about something else and is left alone.
+- Check every frame: it compares where the finder puts the depth point, so a frame where the finder is fooled is
+  flagged just like a real jump, and a frame with no clear depth point is only reported when its neighbours have one.
+  It needs about five frames to tell one bad frame from a camera move.
+- PSD: only the flattened picture saved inside the file (Photoshop: Maximize Compatibility on; Clip Studio and Procreate
+  exports include it). 8 or 16 bit, RGB or grayscale. No layers, no CMYK, no PSB. A transparent background comes out black
+  or white depending on the program that saved it.
+- 3 point grids: three hand-placed points only fit a real lens when each pair can be 90 degrees apart (the triangle
+  they make has no wide corner). When they cannot, the app says so and uses depth + side.
 - Inbetweens: only close poses bend cleanly. Most key-to-key pairs get a guide, by design.
 - Motion check and the timing chart measure ink, not meaning: a redrawn background reads as movement.
 - Camera move from drawings: it follows whatever lines the two drawings share, which is the character if the character fills the frame.

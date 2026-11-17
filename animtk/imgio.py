@@ -47,9 +47,9 @@ def ink_mask(gray, dark=128):
     return gray < dark
 
 def frame_files(folder_or_glob):
-    """numbered PNG frames in order. Accepts a folder or a glob pattern."""
+    """numbered frames in order (PNG, JPG, or PSD read as its flattened picture). Accepts a folder or a glob pattern."""
     if os.path.isdir(folder_or_glob):
-        files = [f for f in glob.glob(os.path.join(folder_or_glob, '*')) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        files = [f for f in glob.glob(os.path.join(folder_or_glob, '*')) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.psd'))]
     else:
         files = glob.glob(folder_or_glob)
     num = lambda f: [int(n) for n in re.findall(r'\d+', os.path.basename(f))] or [0]

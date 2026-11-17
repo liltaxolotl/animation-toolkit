@@ -29,9 +29,11 @@ class Camera:
     skew   : stylized skew in degrees. A sideways shear of the finished picture around its center.
     W, H   : output size in pixels.
     R      : optional 3x3 rotation (rows = camera right, up, forward in world space).
+    shift  : (x, y) pixels the lens centre sits away from the middle of the picture (3 point drawings).
     """
-    def __init__(s, pos, target=None, fov=60.0, k=1.0, roll=0.0, W=3840, H=1920, skew=0.0, R=None):
+    def __init__(s, pos, target=None, fov=60.0, k=1.0, roll=0.0, W=3840, H=1920, skew=0.0, R=None, shift=None):
         s.W, s.H = int(W), int(H)
+        s.ox, s.oy = (float(shift[0]), float(shift[1])) if shift is not None else (0.0, 0.0)
         s.C = np.array(pos, float)
         s.fov, s.roll, s.skew = float(fov), float(roll), float(skew)
         if R is not None:
@@ -57,7 +59,7 @@ class Camera:
     @classmethod
     def from_dict(cls, d, W=None, H=None):
         W = W or d.get('W', 3840); H = H or d.get('H', 1920)
-        kw = dict(fov=d.get('fov', 60.0), k=d.get('k', 1.0), skew=d.get('skew', 0.0), W=W, H=H)
+        kw = dict(fov=d.get('fov', 60.0), k=d.get('k', 1.0), skew=d.get('skew', 0.0), W=W, H=H, shift=d.get('shift'))
         pos = d.get('pos', [0, 5, 0])
         if d.get('R') is not None:
             return cls(pos, roll=d.get('roll', 0.0), R=d['R'], **kw)
@@ -66,8 +68,10 @@ class Camera:
         return cls.from_angles(pos, d.get('yaw', 0.0), d.get('pitch', 0.0), d.get('roll', 0.0), **kw)
 
     def to_dict(s):
-        return dict(pos=[round(float(v), 4) for v in s.C], fov=s.fov, k=s.k, roll=s.roll, skew=s.skew,
-                    R=[[round(float(v), 6) for v in row] for row in s.R], W=s.W, H=s.H)
+        d = dict(pos=[round(float(v), 4) for v in s.C], fov=s.fov, k=s.k, roll=s.roll, skew=s.skew,
+                 R=[[round(float(v), 6) for v in row] for row in s.R], W=s.W, H=s.H)
+        if s.ox or s.oy: d['shift'] = [round(s.ox, 4), round(s.oy, 4)]
+        return d
 
     # -- math (same as perspective_toolkit.py, plus skew)
     def to_cam(s, P):
@@ -77,16 +81,18 @@ class Camera:
         x, y, z = c[:, 0], c[:, 1], c[:, 2]
         th = np.arctan2(np.hypot(x, y), z); ph = np.arctan2(y, x)
         r = s.f * np.tan(np.minimum(s.k * th, 1.5)) / s.k
-        u = s.W / 2 + r * np.cos(ph); v = s.H / 2 - r * np.sin(ph)
-        return np.stack([u + s.shear * (v - s.H / 2), v], 1)
+        cx, cy = s.W / 2 + s.ox, s.H / 2 + s.oy
+        u = cx + r * np.cos(ph); v = cy - r * np.sin(ph)
+        return np.stack([u + s.shear * (v - cy), v], 1)
 
     def project(s, P):
         return s.project_cam(s.to_cam(P))
 
     def ray_cam(s, uv):
         """camera-space direction through a pixel"""
-        v = uv[1]; u = uv[0] - s.shear * (v - s.H / 2)
-        x = u - s.W / 2; y = -(v - s.H / 2); r = np.hypot(x, y)
+        cx, cy = s.W / 2 + s.ox, s.H / 2 + s.oy
+        v = uv[1]; u = uv[0] - s.shear * (v - cy)
+        x = u - cx; y = -(v - cy); r = np.hypot(x, y)
         th = np.arctan(r * s.k / s.f) / s.k; ph = np.arctan2(y, x)
         return np.array([np.sin(th) * np.cos(ph), np.sin(th) * np.sin(ph), np.cos(th)])
 
@@ -132,21 +138,30 @@ def make_camera(fov, k, roll, horizon_y, yaw=0.0, height=1.0, W=3840, H=1920, sk
     return Camera((0, height, 0), tgt, fov, k, roll, W, H, skew)
 
 
-def camera_from_vps(vp_depth, vp_side=None, fov=60.0, roll=0.0, pos=(0, 5, 0), W=3840, H=1920, k=1.0, skew=0.0):
+def camera_from_vps(vp_depth, vp_side=None, fov=60.0, roll=0.0, pos=(0, 5, 0), W=3840, H=1920, k=1.0, skew=0.0, vp_up=None):
     """Build a camera whose world axes hit the vanishing points found on a drawing.
        vp_depth : pixel of the vanishing point for lines going away from the viewer (world z).
        vp_side  : optional second vanishing point (world x). With two, the lens width is solved
                   from them (they must be 90 degrees apart in the world) and roll comes from the horizon.
+       vp_up    : optional third vanishing point (uprights, world y). With all three, the lens width and
+                  the lens centre (shift) are solved so the three are 90 degrees apart.
        Returns (camera, notes)."""
-    notes = []
-    if vp_side is not None:
+    notes = []; shift = None
+    if vp_side is not None and vp_up is not None:
+        t = _solve_three(vp_depth, vp_side, vp_up, W, H, k, skew)
+        if t is None:
+            notes.append('The three points cannot all be 90 degrees apart with any lens, so the upright point is left out.')
+        else:
+            fov, shift = t
+            notes.append('3 point: lens width %.1f degrees, lens centre %.0f, %.0f px from the middle.' % (fov, shift[0], shift[1]))
+    if shift is None and vp_side is not None:
         f_ok = _solve_fov(vp_depth, vp_side, W, H, k, skew)
         if f_ok is None:
             notes.append('The two vanishing points cannot be 90 degrees apart with any lens; kept lens width %.0f.' % fov)
         else:
             fov = f_ok
             notes.append('Lens width solved from the two vanishing points: %.1f degrees.' % fov)
-    cam0 = Camera(pos, fov=fov, k=k, W=W, H=H, skew=skew, R=np.eye(3))
+    cam0 = Camera(pos, fov=fov, k=k, W=W, H=H, skew=skew, R=np.eye(3), shift=shift)
     zc = cam0.ray_cam(vp_depth)
     if vp_side is not None:
         xc = cam0.ray_cam(vp_side); xc = xc - (xc @ zc) * zc; xc /= np.linalg.norm(xc)
@@ -157,7 +172,38 @@ def camera_from_vps(vp_depth, vp_side=None, fov=60.0, roll=0.0, pos=(0, 5, 0), W
         yc = np.array([np.sin(r), np.cos(r), 0.0]); yc = yc - (yc @ zc) * zc; yc /= np.linalg.norm(yc)
         xc = np.cross(yc, zc)
     R = np.stack([xc, yc, zc], 1)
-    return Camera(pos, fov=fov, k=k, W=W, H=H, skew=skew, roll=roll, R=R), notes
+    return Camera(pos, fov=fov, k=k, W=W, H=H, skew=skew, roll=roll, R=R, shift=shift), notes
+
+
+def _solve_three(pa, pb, pv, W, H, k=1.0, skew=0.0):
+    """(lens width, lens centre shift) that put three vanishing points 90 degrees apart, or None.
+       Plain lens: the centre is where the heights of the triangle cross. Bent or skewed: polished from there."""
+    pa, pb, pv = (np.array(q, float) for q in (pa, pb, pv))
+    e1, e2 = pb - pv, pa - pv
+    det = e1[0] * e2[1] - e1[1] * e2[0]
+    if abs(det) < 1e-9: return None
+    c1, c2 = pa @ e1, pb @ e2
+    h = np.array([(c1 * e2[1] - e1[1] * c2) / det, (e1[0] * c2 - c1 * e2[0]) / det])
+    f2 = -float((pa - h) @ (pb - h))
+    if not f2 > 0: return None
+    q = np.array([h[0] - W / 2, h[1] - H / 2, np.degrees(2 * np.arctan(W / 2 / np.sqrt(f2)))])
+    def F(q):
+        c = Camera((0, 0, 0), fov=q[2], k=k, W=W, H=H, skew=skew, R=np.eye(3), shift=(q[0], q[1]))
+        a, b, v = c.ray_cam(pa), c.ray_cam(pb), c.ray_cam(pv)
+        return np.array([a @ b, a @ v, b @ v])
+    st = [0.5, 0.5, 0.01]
+    for _ in range(40):
+        f0 = F(q)
+        if np.abs(f0).max() < 1e-10: break
+        J = np.zeros((3, 3))
+        for j in range(3):
+            q2 = q.copy(); q2[j] += st[j]; J[:, j] = (F(q2) - f0) / st[j]
+        if abs(np.linalg.det(J)) < 1e-30: break
+        step = np.linalg.solve(J, -f0)
+        q = np.array([q[0] + step[0], q[1] + step[1], min(170.0, max(2.0, q[2] + min(20.0, max(-20.0, step[2]))))])
+    if np.abs(F(q)).max() < 1e-6 and 2 < q[2] < 170:
+        return float(q[2]), (float(q[0]), float(q[1]))
+    return None
 
 
 def _solve_fov(vp1, vp2, W, H, k=1.0, skew=0.0):
