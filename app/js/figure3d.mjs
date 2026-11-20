@@ -368,6 +368,25 @@ uniform float uPx; uniform vec2 uRes;`)
 
   // ---------- drawing
   function size() { const r = host.getBoundingClientRect(); return [Math.max(2, Math.round(r.width)), Math.max(2, Math.round(r.height))]; }
+  // the figure through someone else's camera (the Perspective tab's), on transparent, as an N x N square picture.
+  // v: {pos, right, up, back: three.js world vectors (metres), theta: half-angle of the square view (radians), N,
+  //     place: {x, z, yaw, height} (metres, radians), outlinePx}
+  const tcam = new THREE.PerspectiveCamera(60, 1, 0.02, 2000); tcam.matrixAutoUpdate = false;
+  function renderThrough(v) {
+    if (!F) return null;
+    const keep = { pr: renderer.getPixelRatio(), size: renderer.getSize(new THREE.Vector2()), pos: F.root.position.clone(), q: F.root.quaternion.clone(), s: F.root.scale.clone(), g: ground.visible, gr: grid.visible };
+    const s = v.place.height / F.height; F.root.scale.setScalar(s); F.root.position.set(v.place.x, F.lift * s, v.place.z); F.root.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), v.place.yaw); F.root.updateMatrixWorld(true);
+    tcam.fov = 2 * v.theta / DEG; tcam.aspect = 1; tcam.updateProjectionMatrix();
+    tcam.matrixWorld.makeBasis(new THREE.Vector3(...v.right), new THREE.Vector3(...v.up), new THREE.Vector3(...v.back)).setPosition(new THREE.Vector3(...v.pos)); tcam.matrixWorldInverse.copy(tcam.matrixWorld).invert();
+    placeLight(); sun.position.add(new THREE.Vector3(v.place.x, 0, v.place.z)); sun.target.position.set(v.place.x, 0.9 * v.place.height / 1.8, v.place.z);
+    ground.visible = grid.visible = false; renderer.setPixelRatio(1); renderer.setSize(v.N, v.N, false); renderer.setClearColor(0x000000, 0);
+    hullU.uRes.value.set(v.N, v.N); hullU.uPx.value = v.outlinePx || 1.6; outlineOn(!!(STYLES[S.style] || {}).outline);
+    renderer.render(scene, tcam);
+    const c = document.createElement('canvas'); c.width = c.height = v.N; c.getContext('2d').drawImage(renderer.domElement, 0, 0, v.N, v.N);
+    F.root.position.copy(keep.pos); F.root.quaternion.copy(keep.q); F.root.scale.copy(keep.s); F.root.updateMatrixWorld(true); ground.visible = keep.g; grid.visible = keep.gr;
+    renderer.setPixelRatio(keep.pr); renderer.setSize(keep.size.x, keep.size.y, false); render();
+    return c;
+  }
   function render() {
     if (!F) return; const [w, h] = size();
     if (renderer.domElement.width !== Math.round(w * renderer.getPixelRatio()) || renderer.domElement.height !== Math.round(h * renderer.getPixelRatio())) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
@@ -435,7 +454,7 @@ uniform float uPx; uniform vec2 uRes;`)
     setBody, render, jointName, angles, setAngles: (n, v, c) => { setAngles(n, v, c ?? S.limits); F.root.updateMatrixWorld(true); render(); changed(); },
     setBuild: (b, cartoon) => { const p = getPose(); if (b != null) S.build = b; if (cartoon != null) S.cartoon = cartoon; const c = S.clip && S.clip.id, t = S.t; stopClip(); reshape(); setPose(p); if (c) playClip(c).then(() => seek(t)); render(); changed(); },
     setStyle: s => { S.style = s; applyStyle(); changed(); }, setLight: (az, el) => { S.light = { az, el }; render(); }, curlFingers: (s, a) => { if (S.clip) freeze(); curlFingers(s, a); F.root.updateMatrixWorld(true); render(); changed(); },
-    standing, getPose, setPose, moveHips: (t, plant) => { moveHips(t, plant); render(); }, overLimits, playClip, seek, play, pause, freeze, stopClip, frameOf, FPS, snapshot, pickJoint, reach: (n, t) => { reach(n, t); render(); }, wpos, proj: v => proj(v, ...size()),
+    standing, getPose, setPose, renderThrough, moveHips: (t, plant) => { moveHips(t, plant); render(); }, overLimits, playClip, seek, play, pause, freeze, stopClip, frameOf, FPS, snapshot, pickJoint, reach: (n, t) => { reach(n, t); render(); }, wpos, proj: v => proj(v, ...size()),
     on: f => listeners.add(f), heads: () => F.heads
   };
 }

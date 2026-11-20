@@ -4,7 +4,8 @@ Tools for hand-drawn 2D animation: perspective, timing, inbetweens, camera moves
 anatomy checks, and a shot tracker updater. One offline app for the artist, plus Python scripts a Claude
 (or anyone) can run on boards and frames.
 
-**If you are a Claude: this page is the whole manual. Read it once, then use the tools.**
+**If you are a Claude: this page is the whole manual. Read it once, then use the tools.** What is built and what
+comes next: `ROADMAP.md`.
 
 Drawings are PNGs on a 3840 x 1920 canvas. A frame sequence is a folder of numbered PNGs (`0001.png`, `0002.png`, ...).
 Other sizes work; 3840 x 1920 is just the default.
@@ -18,7 +19,8 @@ Other sizes work; 3840 x 1920 is just the default.
 3. **A flag means "look here", not "this is wrong".** The tools only see ink and numbers. Stylized perspective
    (wide, bowed, tilted rooms) and stylized proportions are choices, so report flags as questions.
 4. **This repo is public. Never commit artwork, frames, audio, mouth charts or spreadsheets.** `.gitignore` blocks
-   every image, audio, video and spreadsheet type plus `samples/`, `out/`, `tools/`. Do not force-add past it.
+   every image, audio, video, PDF and spreadsheet type plus `samples/`, `out/`, `tools/`, `work/`. Do not force-add past
+   it. (The 3D bodies in `app/assets/` are CC0 and committed on purpose: see `app/assets/CREDITS.md`.)
 5. **Ask the artist before pushing**, and ask where the shot tracker lives before touching it.
 
 ## Setup
@@ -26,12 +28,17 @@ Other sizes work; 3840 x 1920 is just the default.
     pip install -r requirements.txt        # numpy, opencv-python, pillow, scipy, openpyxl  (Python 3.10+)
     python lip_sync.py --setup             # only for lip sync: downloads Rhubarb Lip Sync into tools/rhubarb (about 90 MB)
 
-The app needs nothing installed: open `animation_app.html` in Chrome or Edge. It works offline and no file leaves the computer.
+    python serve.py                        # opens the app at http://127.0.0.1:8765/animation_app.html  [--port N] [--no-open]
+
+The app needs nothing beyond Python and Chrome or Edge. It works offline and no file leaves the computer.
+Double-clicking `animation_app.html` still works for most tabs, but Figure 3D and PDF storyboards need the server, and
+without it nothing saves into `work/` (exports go to Downloads).
 
 ## Which tool for which job
 
 | The artist says | Use |
 |---|---|
+| "Here is my storyboard PDF / a video / a folder of frames" | Start tab: add it, fix the panel boxes, pick what to get help with |
 | "Is my perspective right?" / "find the vanishing points" | Perspective mode in the app ("Find the lines for me", then "Check my drawing against the grid"), or `perspective_check.py` for a saved report |
 | "Give me a clean 1, 2 or 3 point grid to draw over" | Perspective mode: Blank, then click where each vanishing point goes, then Export guide PNG |
 | "Is this character the right size back there?" | Perspective mode: Measure a character |
@@ -45,8 +52,9 @@ The app needs nothing installed: open `animation_app.html` in Chrome or Edge. It
 | "Does this pose read?" / silhouette / values | `value_check.py`, or Value mode in the app |
 | "Check the proportions / balance / this hand / this cat" | `anatomy_guide.py` |
 | "Which mouth goes on which frame?" | `lip_sync.py` |
-| "Show me how a body bends / let me pose a figure and time it" | Body mode in the app |
-| "How many heads tall is a kid / a chibi?" / "what does a walk, sneak, run, jump look like?" / "show me a hand gripping" | Body mode in the app (Proportions, the motion library, Hands and feet) |
+| "Show me how a body bends / let me pose a figure and time it" | Body 2D tab |
+| "How many heads tall is a kid / a chibi?" / "what does a walk, sneak, run, jump look like?" / "show me a hand gripping" | Body 2D tab (Proportions, the motion library, Hands and feet) |
+| "Pose a real figure from any angle" / "a reference render of this pose" / "show me this walk in 3D" | Figure 3D tab |
 | "Mark shot 12 as cleaned up" | `tracker_update.py` |
 
 Every script prints a short plain summary and the list of files it saved. Run any script with `-h`, or read the
@@ -56,8 +64,29 @@ comment at the top of the file, for every option.
 
 ## The app: `animation_app.html`
 
-One self-contained file, five tabs. Load files with the buttons or by dragging them onto the picture. Every tab that
-takes pictures takes PNG, JPG and PSD (the flattened picture inside the PSD; layers are not read).
+Seven tabs: Start, Perspective, Timing, Camera, Value, Body 2D, Figure 3D. Load files with the buttons or by dragging
+them onto the picture. Every tab that takes pictures takes PNG, JPG and PSD (the flattened picture inside the PSD;
+layers are not read). No build step: the page is plain HTML, `app/app.css` and the scripts in `app/js/` (see Layout).
+
+**Start.** The front door. Add pictures, a folder of frames, PSDs, PDF storyboard pages or a short video, then pick what
+to get help with; it hands plain picture files to the matching tab. Originals are only read.
+
+- Several pictures at once become one frame sequence, in name order (frame 2 before frame 10).
+- PDF panels (`app/js/panels.js`), found on a small copy of each page. Bordered panels first: the white gutter is
+  everything light the page edge can reach, and whatever it cannot reach and fills its own box is a panel (a frame
+  around the whole page is looked inside). No borders: the page is split along empty rows, then empty columns, and
+  each piece is trimmed to its ink (a rougher guess, and it says so). Neither: the whole page is one panel. Panels are
+  numbered in reading order; boxes unlike the rest (a dialogue box, a title block) are kept but start switched off.
+- Fixing the crops: drag a box to move it, drag an edge or corner to resize it, click its number to switch it on or
+  off, Draw a box to add one, Delete box (or the Delete key), Find them again to start over. Each panel is cut from a
+  3600 px wide render of its page: `NAME_p01_panel01.png`.
+- Video to frames: From and To (seconds), frames a second and size, then Pull the frames (480 at most):
+  `NAME_0001.jpg ...`. Each frame is the picture showing at that moment, so timing matches the clock whatever the phone
+  filmed at. MP4 (H.264) and WebM work best.
+- What to get help with: Perspective, Animation (Timing), Anatomy (Value for now; 3D pose matching is step 4),
+  Storyboard (Timing as an animatic, plus Perspective to step through the panels), Check everything (Value, Timing when
+  there is more than one frame, and Perspective with the line finder and the drift check on).
+- Through `serve.py` it also writes the shot file and copies of the originals (see Shot files below).
 
 **Perspective.** Load a board, the frames of a whole shot, or start from a blank frame. The grid follows the drawing's
 own angles: nothing is ever "corrected".
@@ -81,9 +110,24 @@ own angles: nothing is ever "corrected".
   high, low).
 - 3D blockout props that sit on the perspective: boxes, cylinders, bottles, jars, shelves, cabinets, doors with a real
   hinge swing.
-- Guide layers (tick boxes): horizon, vanishing points, floor grid, depth lines, uprights (walls), props, my drawn
-  lines. Exports a transparent guide PNG at full canvas size, and saves or loads a scene JSON (the same format
-  `scene_render.py` reads; it also opens the `_check.json` from `perspective_check.py`).
+- Shot presets: 1, 2 and 3 point, low angle, high angle, Dutch, bird's eye, worm's eye, over the shoulder, hallway,
+  room interior, street corner. Each sets a camera (and a few props, walls or markers) to drag from. They switch "Use my
+  lines" off so the preset drives the camera; her drawn lines are kept.
+- 3D figure in this shot (needs `serve.py`): the posed figure from the Figure 3D tab, rendered through this tab's own
+  camera, so it matches the grid exactly, fisheye, skew and the 3 point lens shift included. It stands on the pink height
+  marker at that character's height (or 12 ft away at 5 ft 4 in); "Place it" puts it on any floor spot, Turn spins it (0 =
+  facing the camera). It is the "3D figure" layer: opacity, export alone, before/after. How (app/js/persp3d.js): three.js
+  draws a square wide picture from the same spot; every drawing pixel asks `AT.rayCam` which way it looks and reads that
+  direction from the square. Feet to metres: 0.3048, and the depth axis flips (Perspective z runs away from the camera).
+- Guide layers, one row each: horizon, vanishing points, floor grid, depth lines, uprights (walls), props, character
+  height, drift check, my drawn lines (character height and drift start ticked). Every row has a tick box, an opacity
+  slider (it carries into the export) and a button that exports that layer alone as `BOARD_<layer>.png` (the drift
+  layer is empty until "Check my drawing" is on, and it says so). Export guide PNG saves every ticked layer as one
+  transparent `BOARD_guide.png` at the drawing's exact size. Exports always download; through `serve.py` a copy also
+  lands in `work/BOARD/exports/`.
+- Before / after slider on the picture: drag the handle, and left of it shows the drawing untouched.
+- Saves or loads a scene JSON (the same format `scene_render.py` reads; it also opens the `_check.json` from
+  `perspective_check.py`).
 
 **Timing.** Load a frame sequence. Plays at 24 fps (12, 25, 30 too), everything on 1s, 2s or 3s, with a hold per
 drawing. Onion skin with separate before and after counts. Mark keys, breakdowns and inbetweens (K, B, I); the timing
@@ -101,7 +145,7 @@ A key can carry its drawing so keys can be lined up by eye. Exports the table as
 figure; click any patch to flip it between black and white. Painted frames: darker than a cutoff. Transparent
 backgrounds: used directly. Grayscale can be squashed to 2 to 5 values. Flip, stack, and full-size PNG export.
 
-**Body.** A posable side-view mannequin for anatomy and body mechanics. Three views, picked above the picture:
+**Body 2D.** A posable side-view mannequin for anatomy and body mechanics. Three views, picked above the picture:
 **Mannequin** (pose it, play it), **Proportions** (a guide in head heights) and **Hands and feet** (a gesture sheet).
 
 - Posing. Joints: neck, spine, hips, and both shoulders, elbows, wrists, knees and ankles. Drag a body part to swing it
@@ -156,6 +200,124 @@ Pose fields: `x`, `y` (hips, in head heights, ground at 0, standing hips at abou
 side). 0 is the resting position and positive is the natural bend: arms and thighs swing forward, elbows and knees
 fold, the torso and head bow forward, toes lift. Anything left out is taken from the standing pose. `ease` is how the
 motion leaves that key: `inout`, `in`, `out` or `linear`.
+
+**Figure 3D.** A real rigged human for posing and reference renders. Needs `serve.py`. `app/js/figure3d.mjs` is the
+figure, `figure-ui.mjs` the tab, and `figure-tab.js` loads them the first time the tab opens; from then on
+`window.Fig3D` is the API other tabs use.
+
+- Bodies: Adult man and Adult woman (Mesh2Motion, CC0), one 66-bone skeleton with fingers. Switching keeps the pose.
+- Builds: Average, Heavier, Thinner, Teen, Kid (about 8), each a length and girth scale per bone, applied in the bind
+  pose so bent joints never shear. The Cartoon slider (0 to 100%) goes realistic, cartoon, chibi: up to a 2.3 times
+  head, shorter torso, legs and arms, bigger hands and feet. The readout gives heads tall (from the vertices that move
+  with the head) and the height in ft and m. The feet always stand on the ground.
+- Looks: Toon + outline (three tone steps and an inverted-hull outline about 1.6 px wide), Light and shadow,
+  Cross-contour (blue rings round every limb), Wooden mannequin, Skeleton (x-ray). Light direction sliders, Floor and
+  shadow, Show the skeleton on top.
+- Posing: a dot on every joint (orange diamond = hips, green = hands and feet, pink = selected). Drag a wrist or ankle
+  for two-bone IK (shoulder and elbow, or hip and knee; the hand or foot keeps its angle). Drag any other dot and its
+  parent turns to point at it. Drag the hips to move the body; with "Feet stay put when the hips move" (on by default)
+  the legs follow by IK. Drags move on a plane facing the camera. Empty space orbits, right drag pans, the wheel zooms.
+  Click a dot for its sliders, named in the joint's own words with its real range. Reset this joint, Standing pose, a
+  hands slider (flat to fist), Undo (60 steps).
+- "Keep joints inside a real body's range" (on by default) clamps the sliders and the drags. A joint past its range
+  (from a clip, or with the box off) gets a pink ring and a line in the list, "12° past": a heads up, not a rule.
+- Actions: 42 Mesh2Motion clips in five groups (walks; runs and jumps; bend, sit, kneel; reach and act; moods). They
+  keep only the rotations plus the hips' travel scaled to the current build. Play, speed, and a 24 fps timeline to
+  scrub. Walks and runs get their key poses marked from the feet and hips: contact (red), down (blue), passing (green),
+  up (orange). Pose this frame (or grabbing any dot or slider) turns the frame on screen into a still pose to change.
+- Save picture (PNG): 3840 x 1920, 1920 x 1080 or this view's size, transparent by default (figure only, no floor), the
+  outline scaled to the size: `figure_man_pose.png`, or `figure_man_walk_f12.png` from a clip. It downloads and is kept
+  in `work/figure/exports/`.
+
+Joints. Angles are in degrees with their real range; "its left" means the figure's own left, `_l` and `_r` the sides.
+
+| Joint | Bone | Angles (axis): real range |
+|---|---|---|
+| Hips | `pelvis` | turn to its left (y) -180 to 180, tip forward (x) -90 to 90, tip to its left (z) -60 to 60. Free: never flagged |
+| Lower back | `spine_01` | bend forward (x) -15 to 30, lean to its left (z) -12 to 12, twist to its left (y) -12 to 12 |
+| Mid back | `spine_02` | bend forward -12 to 30, lean -12 to 12, twist -15 to 15 |
+| Chest | `spine_03` | bend forward -12 to 25, lean -10 to 10, twist -15 to 15 |
+| Neck | `neck_01` | bend forward -40 to 45, lean -25 to 25, twist -45 to 45 |
+| Head | `head` | bend forward -30 to 30, lean -18 to 18, twist -35 to 35 |
+| Collarbone | `clavicle_l/_r` | shrug up (z) -10 to 35, forward (y) -15 to 25, roll (x) -10 to 10 |
+| Shoulder | `upperarm_l/_r` | raise forward (x) -60 to 180, raise to the side (z) -35 to 180, turn out (y) -90 to 90 |
+| Elbow | `lowerarm_l/_r` | bend (y) 0 to 150. A hinge: the other two turns are held within 8 |
+| Wrist | `hand_l/_r` | bend toward the palm (z) -70 to 80, toward the thumb (y) -30 to 20, roll the hand (x) -90 to 90 |
+| Hip joint | `thigh_l/_r` | swing forward (x) -30 to 125, out to the side (z) -25 to 45, turn the knee out (y) -40 to 45 |
+| Knee | `calf_l/_r` | bend (x) 0 to 150. A hinge, held within 6 |
+| Ankle | `foot_l/_r` | point the toes (x) -25 to 50, roll the sole in (z) -20 to 25, turn the toes in (y) -25 to 25 |
+| Toes | `ball_l/_r` | toes up (x) -30 to 60. A hinge, held within 5 |
+
+Angle conventions: each angle is measured in the body's frame at rest (X = the figure's left, Y = up, Z = forward) and
+carried along by the parent bone: `local = (Wp^-1 * D * Wp) * restLocal`, where Wp is the parent's rest world rotation
+and D is built from the angles (Euler, in the order the joint lists them). 0 is the rest pose. Shoulders are measured
+from "arm hanging down", so they read like the hips. The right side mirrors the left (angles about Y and Z flip sign),
+so the same numbers make the same pose on either side. Every rotation has two Euler readings; the one inside the
+joint's range wins, so an arm raised past level never reads as bent backwards.
+
+To pose it from code: `Fig3D.setAngles('lowerarm_l', {y: 90})` bends its left elbow 90 degrees, and
+`Fig3D.angles(bone)` lists each angle's label, axis, value and range. Also on `Fig3D`: `setBody`, `setBuild(build,
+cartoon)`, `setStyle`, `setLight(az, el)`, `standing`, `curlFingers(side, 0 to 1)`, `moveHips`, `reach(end, target)`,
+`getPose`, `setPose`, `playClip(id, {play})`, `seek(seconds)`, `play`, `pause`, `freeze`, `overLimits`, `heads`,
+`snapshot(W, H, transparent)` (a canvas), `on(listener)`, and `scene`, `camera`, `renderer`, `JOINTS`, `BUILDS`,
+`STYLES`, `CLIPS`.
+
+Save pose / Open a pose use a pose file:
+
+    {"kind": "animtk-figure-pose", "version": 1, "body": "man", "build": "average", "cartoon": 0,
+     "pelvis": [x, y, z], "pelvisRest": [x, y, z], "bones": {"pelvis": [qx, qy, qz, qw], "spine_01": [...], ...}}
+
+`bones` holds every bone's local rotation as a quaternion (three.js order x, y, z, w), so pose with `setAngles` and save
+rather than writing one by hand. `body` is `man` or `woman`, `build` one of `average`, `heavier`, `thinner`, `teen`,
+`kid`, and `cartoon` 0 to 1. Opening a pose switches the body and build to match and rescales the hips' position.
+
+### Shot files, saving and layers (`app/js/shot.js`, shared by every tab)
+
+- **Store** saves into `work/<shot>/` through `serve.py`, or downloads when the page was opened as a plain file. Names
+  are cleaned to letters, digits, spaces and `_ . - ( )`.
+  - `work/<shot>/shot.json`: the shot file, the only file anything ever overwrites.
+  - `work/<shot>/source/`: write-once copies of the originals.
+  - `work/<shot>/<base>_<tag>_vN.<ext>`: edited copies (`Store.saveVersion`), numbered from what is already in the
+    folder (and this browser's memory when offline), so `shot01_edit_v1.png`, `_v2`, ... never replace each other.
+  - `work/<shot>/exports/`: a copy of every export. The export itself always downloads, where the artist picks it up.
+- The shot file:
+
+      {"kind": "animtk-shot", "version": 1, "name": "shot01", "created": "<ISO time>", "help": ["perspective"],
+       "sources": [{"file": "shot01.png", "size": 123456, "w": 3840, "h": 1920}],
+       "detections": {"panels": [{"page": 1, "how": "borders", "panels": [{"x": 0.05, "y": 0.04, "w": 0.4, "h": 0.3, "use": true}]}],
+                      "video": {"fps": 24, "frames": 48}},
+       "layers": [], "edits": [], "notes": []}
+
+  `help` lists every help button used on it; panel boxes are fractions of the page. `layers`, `edits` and `notes` are
+  empty for now and wait for the later steps (redlines, corrected copies, critique).
+- **Vec**, the vector overlay format. A layer is `{id, name, color, opacity (0 to 100), visible, items}` in the
+  drawing's own pixels, so an exported layer drops straight onto the drawing in any program. Items, with `t` the type:
+  `line {a, b}`, `arrow {a, b}`, `poly {pts, closed}`, `circle {c, r}`, `ellipse {c, rx, ry, rot}` (rot in degrees),
+  `rect {a, b}`, `text {at, text, size}`, `pin {from, to}` (a warp pin: where a bit of linework should move to). Points
+  are `[x, y]`. Any item can carry `color`, `w` (line width in px at 3840 wide, default 6, scaled with the drawing),
+  `dash: [on, off]` and `fill`. For example `{"t": "arrow", "a": [1200, 900], "b": [1340, 860], "color": "#e8202a"}`.
+  `Vec.canvas(layers, W, H)` draws them on a transparent canvas at the drawing's size. Nothing draws with it yet:
+  redlines (step 5) and critique answers (step 7) will come back in it.
+- `layerRows(el, {rows, get, set, exportOne})` builds the tick box, opacity and export-one-layer rows for any tab, and
+  `BeforeAfter(stage, onChange)` adds the draggable split handle.
+
+### serve.py: the app's local server
+
+    python serve.py [--port 8765] [--no-open]
+
+Serves the toolkit folder read-only to this computer only (it binds to 127.0.0.1) and opens the app. If the port is
+taken it assumes the server is already running and just opens the browser. It saves only into `work/` and never
+overwrites a file, except a shot's own `shot.json` (written to a temp file, then swapped in). Every other save is
+create-only, so two saves at once can never both win. Each path part may only use letters, digits, spaces and
+`_ . - ( )`, and a part that is only dots or spaces, or ends in one, is refused (Windows would quietly drop them). The
+API, used by `Store`:
+
+    GET  /api/ping                        -> {"ok": true, "work": "<absolute path of work/>"}
+    GET  /api/list?dir=work/<shot>        -> {"files": [{"name", "size", "dir"}]}   (empty if the folder is not there yet)
+    POST /api/save?path=work/<shot>/<f>   body = the file's bytes -> {"ok": true, "path"}
+                                          409 if it exists, 400 outside work/, 413 over 400 MB
+
+The Python scripts (and a Claude) can read the same `work/<shot>/` folders.
 
 ---
 
@@ -311,10 +473,33 @@ Use whichever the artist asked for.
 - App Timing x-sheet CSV and `lip_sync.py` CSV both count frames from 1 at the same fps, so the mouth column lines up
   with the x-sheet rows (`--start` shifts it when the line starts later in the shot).
 - `motion_check.py` says where a breakdown is missing -> `inbetween.py` on those two frames.
+- App Start -> Perspective, Timing, Value: plain picture files (PDF panels, video frames), never the originals.
+- Everything the app saves through `serve.py` sits in `work/<shot>/` (shot file, copies of originals, numbered
+  versions, exports), where the scripts can read it.
 
 ## Layout
 
-    animation_app.html       the app (plain HTML and JavaScript, no build step)
+    animation_app.html       the app's page: the markup, an import map for three.js, and the scripts below in order
+    serve.py                 the app's local server (127.0.0.1:8765), saves into work/
+    app/app.css              the app's styles
+    app/js/*.js              classic scripts sharing globals, in page order:
+        core.js              camera, props, rendering                (CORE block, twin of animtk/scene3d.py)
+        cam-math.js          camera move math                        (CAM block, twin of animtk/cammove.py)
+        value-math.js        silhouette and grayscale                (VAL block, twin of animtk/value.py)
+        psd.js               the flattened picture out of a PSD      (PSD block, app only)
+        lines.js             straight strokes, vanishing points      (LINES block; lines.py is a separate one)
+        body-math.js         the Body 2D mannequin math              (BODY block, app only)
+        helpers.js           $, $$, fileImage, PICS, download, the tab switcher
+        shot.js              Store, the shot file, Vec layers, layerRows, BeforeAfter
+        panels.js            storyboard panel finding                (PANELS block, app only)
+        gif.js               GIF export                              (GIF block)
+        perspective.js, timing.js, camera.js, value.js, body.js, start.js     one per tab
+        persp3d.js           the 3D figure in Perspective: render through the Perspective camera, lens remap
+        figure-tab.js        loads Figure 3D the first time its tab opens
+    app/js/figure3d.mjs      the 3D figure (ES module): bodies, builds, looks, joints, IK, clips, snapshot
+    app/js/figure-ui.mjs     the Figure 3D tab's controls (ES module)
+    app/vendor/              three.js 0.186.1, pdf.js 3.11.174
+    app/assets/figures/      the CC0 bodies and clips (licenses: app/assets/CREDITS.md)
     *.py                     the scripts above
     animtk/                  shared code
         imgio.py             loading and saving that never overwrites an input
@@ -326,15 +511,14 @@ Use whichever the artist asked for.
         cammove.py           camera move math                (mirrored in the app: CAM block)
         value.py             silhouette and grayscale        (mirrored in the app: VAL block)
         anatomy.py           rigs and checks
-    (app only: BODY block)   the mannequin math for Body mode, no Python twin
-    (app only: PSD block)    reads the flattened picture out of a Photoshop file
-    (app only: LINES block)  finds straight strokes and vanishing points in the browser (lines.py is the Python one; they are separate)
     examples/                a sample scene, blank landmark files
     tests/                   see below
-    samples/ out/ tools/     git-ignored: artwork, results, Rhubarb
+    samples/ out/ tools/ work/    git-ignored: artwork, results, Rhubarb, the app's working folder
 
 Math that exists in both Python and the app is kept identical on purpose and tested against each other. If you change
-one side, change the other and run the matching test.
+one side, change the other and run the matching test. Tests find each app block by its `/*NAME-START*/ ...
+/*NAME-END*/` markers through `tests/appsrc.mjs`, which pulls every `<script src="app/...">` into one string in page
+order, so a block can move between files without breaking a test.
 
 ## Tests
 
@@ -350,8 +534,13 @@ None of them need artwork: they generate their own stand-ins into `tests/out/`.
     node tests/test_app_camera.mjs       # Camera and Value modes, and their math against Python
     node tests/test_app_body.mjs         # Body mode: mannequin math, motions, balance, joint ranges, muscles, hands, feet, the three views
     node tests/test_app_frames.mjs       # PSD files, finding lines, checking a drawing, 1, 2 and 3 point grids, character height, a shot's frames
+    python -P tests/test_serve.py        # serve.py: saves only into work/, never overwrites, refuses every way out, numbered versions
+    node tests/test_app_start.mjs        # Start tab (uploads, PDF panels, video frames, routing) and the Perspective layer rows
+    node tests/test_app_figure.mjs       # Figure 3D: bodies and builds, joint angle conventions, IK, mouse posing, limits, clips, pose files, pictures
 
-The five browser tests need `npm i puppeteer-core` (it drives the Chrome or Edge already installed).
+The browser tests need `npm i puppeteer-core` (in `_scratch/` is fine; it drives the Chrome or Edge already installed).
+`test_serve.py`, `test_app_start.mjs` and `test_app_figure.mjs` start `serve.py` on a free port themselves, and the
+first two remove every `work/_test_*` folder they made.
 
 ## Known limits (say these out loud when they apply)
 
@@ -375,7 +564,7 @@ The five browser tests need `npm i puppeteer-core` (it drives the Chrome or Edge
 - Camera move from drawings: it follows whatever lines the two drawings share, which is the character if the character fills the frame.
 - Silhouette of line art: which closed shapes are "figure" is a guess when the figure leaves the frame; check the picture.
 - Anatomy: depends entirely on where the joints were placed. Foreshortening explains many flags.
-- Body mode: a flat side view. It cannot turn to face the camera, and the far arm hides behind the torso when it hangs
+- Body 2D: a flat side view. It cannot turn to face the camera, and the far arm hides behind the torso when it hangs
   (grab its dots). The joint ranges are for an average adult seen from the side, and a joint is never stopped, only
   flagged. The muscles are a cartoon of the real thing: one blob per group, driven by one or two joint angles. Hair,
   scarf and coat tail are simple chains with made-up weight; they pass in front of the body instead of wrapping round
@@ -385,6 +574,14 @@ The five browser tests need `npm i puppeteer-core` (it drives the Chrome or Edge
   adult body weights, ignores anything being carried, and only knows front and back. In a walk it honestly reads "tipping"
   for much of each step, because walking is falling and catching. The line of action is a fitted curve: a guide to
   compare poses with, not a judgement.
+- Figure 3D: needs `serve.py` (from a double-clicked file the tab only explains how to open it). The builds and the
+  cartoon slider re-proportion the two CC0 bodies; they are not separate models. The mannequin bodies have no face. In
+  Perspective the figure is drawn over the props (no hiding behind a cabinet yet), and past about 76 degrees from the
+  lens centre (extreme fisheye corners) it is cut off. The joint ranges are for an average adult. Key pose marks
+  are found from the feet and hips, so only walks and runs get them.
+- Start: a page with no panel borders is split along its white gaps, a rougher guess, so panels with no gap between
+  them come out as one box: check every box. A video gives at most 480 frames per pull, only in formats the browser
+  can play.
 - Lip sync: English recognition by default; a computer cannot hear acting, so treat the result as a first pass to adjust.
 - Tracker: a save through this tool rebuilds charts (they can lose styling) and drops drawn shapes, text boxes,
   slicers and sparklines. It warns when the workbook has any, and refuses `--in-place` without `--force`.

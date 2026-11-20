@@ -6,7 +6,7 @@ const Persp = (() => {
     W: 3840, H: 1920, boardOp: 55, boardName: 'board',
     cam: { yaw: 0, pitch: 0, roll: 0, fov: 60, fish: 0, skew: 0, height: 5 },
     useLines: true, solveLens: true, snap: true, solid: false,
-    lines: [], props: [], figure: null, poles: [],
+    lines: [], props: [], figure: null, poles: [], fig3d: { on: false, turn: 0 },
     guide: { horizon: true, vps: true, grid: true, rays: true, walls: false, props: true, lines: false, tile: 1, extent: 12, weight: 1 }
   };
   const UI = { tool: 'A', sel: null, view: { s: 0.3, x: 0, y: 0 }, drag: null, space: false, note: '', found: null, check: false, drift: null, boards: [], bi: 0, hover: null, seq: null };
@@ -15,8 +15,8 @@ const Persp = (() => {
   const kOf = () => 1 - (S.cam.fish / 100) * 0.98;
   const BA = BeforeAfter(stage, () => draw());
   const LAYERS = [['horizon', 'Horizon', '#e61e28'], ['vps', 'Vanishing points', '#2f7bff'], ['grid', 'Floor grid', '#787878'], ['rays', 'Depth lines', '#286ee6'],
-    ['walls', 'Uprights (walls)', '#1faa5c'], ['props', 'Props', '#e67800'], ['height', 'Character height', '#e24bb5'], ['drift', 'Drift check', '#ff7a1a'], ['lines', 'My drawn lines (in the export)', '#2f7bff']];
-  const DEFAULT_ON = { height: true, drift: true };
+    ['walls', 'Uprights (walls)', '#1faa5c'], ['props', 'Props', '#e67800'], ['height', 'Character height', '#e24bb5'], ['drift', 'Drift check', '#ff7a1a'], ['figure3d', '3D figure', '#8a5cf6'], ['lines', 'My drawn lines (in the export)', '#2f7bff']];
+  const DEFAULT_ON = { height: true, drift: true, figure3d: true };
 
   // ---------- state
   const snapshot = () => JSON.stringify({ cam: S.cam, lines: S.lines, props: S.props, figure: S.figure, poles: S.poles }, (k, v) => k === '_px' ? undefined : v);
@@ -47,6 +47,10 @@ const Persp = (() => {
       c.strokeStyle = 'rgba(120,120,120,0.8)'; c.lineWidth = lw(4); const e = G.extent, t = G.tile;
       for (let x = -e; x <= e + 1e-6; x += t) line3(c, cam, [[x, 0, 0.25], [x, 0, 2*e]], 60);
       for (let z = t; z <= 2*e + 1e-6; z += t) line3(c, cam, [[-e, 0, z], [e, 0, z]], 40);
+    }
+    if (S.fig3d && S.fig3d.on && G.figure3d !== false) {   // the posed 3D figure, under the guide lines
+      const im = c === ctx ? Persp3D.preview(cam, S) : Persp3D.render(cam, S.figure || { x: 0, z: 12, h: 5.33 }, S.fig3d.turn, S.W, S.H);
+      if (im) { A('figure3d'); c.drawImage(im, 0, 0, S.W, S.H); }
     }
     if (G.rays) { A('rays');
       c.strokeStyle = 'rgba(40,110,230,0.6)'; c.lineWidth = lw(3);
@@ -198,6 +202,7 @@ const Persp = (() => {
     cv.setPointerCapture(e.pointerId); const p = toCanvas(e);
     if (e.button === 1 || e.button === 2 || UI.space) { UI.drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, x: UI.view.x, y: UI.view.y }; return; }
     if (UI.tool === 'H') { UI.drag = { kind: 'height', p0: p, p1: p }; return; }
+    if (UI.tool === 'F') { const g = AT.planePoint(D.cam, p, 0); if (g) { pushUndo(); S.figure = { x: g[0], z: g[2], h: S.figure ? S.figure.h : 5.33 }; UI.note = ''; } else UI.note = 'That spot is above the horizon, so it is not on the floor.'; setTool('S'); syncAll(); return; }
     if (UI.tool === 'S') for (const g of ['A', 'B', 'V']) { const vp = D.count[g] > 1 ? D.vp[g] : null; if (vp && Math.abs(vp[0]) < 1e6 && Math.hypot(p[0] - vp[0], p[1] - vp[1]) < 12 / UI.view.s) { pushUndo(); UI.sel = null; UI.drag = { kind: 'vp', g, from: S.lines.filter(l => l.g === g).map(l => ({ l, a: l.a.slice(), b: l.b.slice() })) }; return; } }
     if (UI.tool !== 'S') { pushUndo(); S.lines.push({ g: UI.tool, a: p, b: p.slice() }); UI.sel = { kind: 'line', i: S.lines.length - 1 }; UI.drag = { kind: 'line', i: S.lines.length - 1, part: 'b', fresh: true }; draw(); return; }
     const h = hit(p); UI.sel = h ? { kind: h.kind, i: h.i } : null;
@@ -278,6 +283,48 @@ const Persp = (() => {
     high: { fov: 125, fish: 30, roll: -8, skew: 0, pitch: -38, height: 9 }, low: { fov: 125, fish: 30, roll: 7, skew: 0, pitch: 28, height: 1 } };
   $$('[data-preset]').forEach(b => b.onclick = () => { pushUndo(); derive(); const p = PRESET[b.dataset.preset]; for (const k in p) if (!D.locked[k]) S.cam[k] = p[k]; syncAll(); });
   $('#pFit').onclick = fit;
+
+  // ---------- shot presets: a camera (and a few props) to start from, never a finished answer
+  const SHOTS = {
+    p1: { cam: { yaw: 0, pitch: 0, roll: 0, fov: 60, fish: 0, skew: 0, height: 5 }, about: '1 point: looking straight down the depth lines.' },
+    p2: { cam: { yaw: 35, pitch: 0, roll: 0, fov: 60, fish: 0, skew: 0, height: 5 }, about: '2 point: turned to the room, verticals stay straight.' },
+    p3: { cam: { yaw: 35, pitch: 24, roll: 0, fov: 70, fish: 0, skew: 0, height: 4 }, about: '3 point: tilted up, so the verticals meet above.' },
+    low: { cam: { yaw: 20, pitch: 12, roll: 0, fov: 70, fish: 0, skew: 0, height: 1.8 }, about: 'Low angle: camera near the floor, a little tilt up. Characters loom.' },
+    high: { cam: { yaw: 25, pitch: -30, roll: 0, fov: 60, fish: 0, skew: 0, height: 14 }, about: 'High angle: above head height looking down. Characters shrink.' },
+    dutch: { cam: { yaw: 30, pitch: 0, roll: 16, fov: 60, fish: 0, skew: 0, height: 5 }, about: 'Dutch: the camera rolled, the horizon tilts. Unease, tension.' },
+    bird: { cam: { yaw: 30, pitch: -62, roll: 0, fov: 55, fish: 0, skew: 0, height: 32 }, about: "Bird's eye: high and steep. The floor plan reads." },
+    worm: { cam: { yaw: 15, pitch: 42, roll: 0, fov: 90, fish: 10, skew: 0, height: 0.4 }, about: "Worm's eye: on the floor looking up. Everything towers." },
+    ots: { cam: { yaw: 6, pitch: -3, roll: 0, fov: 50, fish: 0, skew: 0, height: 5.4 }, figure: { x: -0.9, z: 2.6, h: 5.33 }, poles: [[1.2, 11]], turn: 180, fig3d: true, about: 'Over the shoulder: the 3D figure is the near shoulder (back to camera), the blue marker is the one being looked at.' },
+    hall: { cam: { yaw: 0, pitch: 0, roll: 0, fov: 75, fish: 0, skew: 0, height: 5 }, guide: { walls: true, grid: true, extent: 4 }, about: 'Hallway: 1 point, walls 4 ft each side. Widen it with Grid reach.' },
+    room: { cam: { yaw: 25, pitch: -4, roll: 0, fov: 90, fish: 8, skew: 0, height: 5 }, guide: { walls: true, grid: true, extent: 10 }, props: [{ type: 'door', pos: [-3, 0, 20] }], about: 'Room interior: wide lens from a corner, a door on the back wall.' },
+    corner: { cam: { yaw: 45, pitch: 6, roll: 0, fov: 70, fish: 0, skew: 0, height: 5.5 }, guide: { grid: true, extent: 30 }, props: [{ type: 'box', pos: [42, 0, 42], rot: 0, w: 40, h: 34, d: 40, name: 'building' }], about: 'Street corner: a building corner points at the camera, and both streets run to their own points.' }
+  };
+  function applyShot(id) {
+    const sh = SHOTS[id]; if (!sh) return; pushUndo();
+    S.useLines = false; Object.assign(S.cam, sh.cam); if (sh.guide) Object.assign(S.guide, sh.guide);
+    if (sh.props) for (const q of sh.props) S.props.push({ id: pid++, rot: 0, ...JSON.parse(JSON.stringify(AT.DEF[q.type])), name: q.name || q.type, ...q, pos: q.pos.slice() });
+    if (sh.figure) { S.figure = { ...sh.figure }; S.poles = (sh.poles || []).map(q => q.slice()); }
+    if (sh.turn != null) { S.fig3d.turn = sh.turn; $('#pFigTurn').value = sh.turn; $('#pFigTurn').nextElementSibling.textContent = sh.turn + '°'; }
+    if (sh.fig3d) setFig3d(true);
+    $('#pShotInfo').textContent = sh.about + (S.lines.length ? ' Your drawn lines are kept but switched off ("Use my lines" turns them back on).' : '');
+    syncAll();
+  }
+  $$('[data-shot]').forEach(b => b.onclick = () => applyShot(b.dataset.shot));
+  // ---------- the 3D figure in the shot
+  async function setFig3d(on) {
+    S.fig3d.on = on; $('#pFig3d').checked = on; save();
+    if (on) {
+      $('#pFigInfo').textContent = 'Loading the figure...'; const F = await Persp3D.load();
+      if (!F) { S.fig3d.on = false; $('#pFig3d').checked = false; $('#pFigInfo').textContent = location.protocol === 'file:' ? 'The 3D figure needs the app opened with the toolkit shortcut (python serve.py).' : 'The 3D figure did not load.'; draw(); return; }
+      $('#pFigInfo').textContent = S.figure ? 'Standing on the pink height marker, ' + S.figure.h.toFixed(1) + ' ft tall. Pose it in Figure 3D and it updates here.' : 'No height marker yet, so it stands 12 ft away at 5 ft 4 in. Measure a character or click "Place it". Pose it in Figure 3D and it updates here.';
+    }
+    draw();
+  }
+  $('#pFig3d').onchange = e => setFig3d(e.target.checked);
+  $('#pFigPlace').onclick = () => { setTool('F'); UI.note = 'Click a spot on the floor for the 3D figure to stand on.'; draw(); };
+  $('#pFigTurn').oninput = e => { S.fig3d.turn = +e.target.value; e.target.nextElementSibling.textContent = e.target.value + '°'; save(); draw(); };
+  $('#pFigTurn').nextElementSibling.textContent = '0°';
+
 
   // ---------- props
   const FIELDS = { box: ['w', 'h', 'd'], cylinder: ['r', 'h'], bottle: ['r', 'h'], jar: ['r', 'h'], shelf: ['w', 'h', 'd', 'shelves'], cabinet: ['w', 'h', 'd', 'shelves', 'doors', 'swing'], door: ['w', 'h', 'swing', 'hinge'] };
@@ -380,11 +427,11 @@ const Persp = (() => {
     derive(); const cam = D.cam, a = AT.rToAngles(cam.R), r4 = v => Math.round(v * 1e6) / 1e6;
     return { canvas: [S.W, S.H], camera: { pos: cam.C, fov: r4(cam.fov), k: r4(cam.k), roll: r4(a.roll), yaw: r4(a.yaw), pitch: r4(a.pitch), skew: S.cam.skew, R: cam.R.map(r => r.map(r4)), ...(cam.ox || cam.oy ? { shift: [r4(cam.ox), r4(cam.oy)] } : {}) },
              floor: [-S.guide.extent, S.guide.extent, 0.25, 2 * S.guide.extent], props: S.props.map(clean),
-             app: { lines: S.lines, cam: S.cam, guide: S.guide, useLines: S.useLines, solveLens: S.solveLens, figure: S.figure, poles: S.poles } };
+             app: { lines: S.lines, cam: S.cam, guide: S.guide, useLines: S.useLines, solveLens: S.solveLens, figure: S.figure, poles: S.poles, fig3d: S.fig3d } };
   }
   function loadScene(o) {
     pushUndo();
-    if (o.app) { S.lines = o.app.lines || []; Object.assign(S.cam, o.app.cam || {}); Object.assign(S.guide, o.app.guide || {}); S.useLines = o.app.useLines !== false; S.solveLens = o.app.solveLens !== false; S.figure = o.app.figure || null; S.poles = o.app.poles || []; }
+    if (o.app) { S.lines = o.app.lines || []; Object.assign(S.cam, o.app.cam || {}); Object.assign(S.guide, o.app.guide || {}); S.useLines = o.app.useLines !== false; S.solveLens = o.app.solveLens !== false; S.figure = o.app.figure || null; S.poles = o.app.poles || []; if (o.app.fig3d) S.fig3d = { on: false, turn: o.app.fig3d.turn || 0 }; }
     else {
       S.lines = [];
       if (o.lines && o.vanishing_points) {        // a perspective_check JSON: bring its grouped lines in
@@ -413,6 +460,6 @@ const Persp = (() => {
   if (hp.get('scene')) { try { loadScene(JSON.parse(hp.get('scene'))); undo = []; } catch (e) {} }
   if (hp.get('board')) { const img = new Image(); img.onload = () => setBoard(img, hp.get('board').split('/').pop()); img.src = hp.get('board'); }
   setTool(hp.get('tool') || 'A'); syncSeq(); syncAll(); fit();
-  return { S, UI, D: () => D, draw, fit, loadScene, sceneJSON, guideCanvas, setBoard, addProp, setTool, findLines, findSegs, checkSequence, showBoard, loadBoardFiles, BA, board: () => board,
+  return { S, UI, D: () => D, applyShot, setFig3d, draw, fit, loadScene, sceneJSON, guideCanvas, setBoard, addProp, setTool, findLines, findSegs, checkSequence, showBoard, loadBoardFiles, BA, board: () => board,
     setCheck: on => { UI.check = on; $('#pCheck').checked = on; draw(); } };
 })();

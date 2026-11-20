@@ -188,6 +188,23 @@
       </div>
       <div class="row"><button id="pResetLens">Reset lens</button></div>
     </div>
+    <div class="card">
+      <h2>Shot presets</h2>
+      <div class="grid3" id="pShots">
+        <button data-shot="p1">1 point</button><button data-shot="p2">2 point</button><button data-shot="p3">3 point</button>
+        <button data-shot="low">Low angle</button><button data-shot="high">High angle</button><button data-shot="dutch">Dutch</button>
+        <button data-shot="bird">Bird's eye</button><button data-shot="worm">Worm's eye</button><button data-shot="ots">Over the shoulder</button>
+        <button data-shot="hall">Hallway</button><button data-shot="room">Room</button><button data-shot="corner">Street corner</button>
+      </div>
+      <div class="muted" id="pShotInfo" style="margin-top:6px">A starting camera to drag and tweak. Your drawn lines stay, switched off while a preset drives the camera.</div>
+    </div>
+    <div class="card">
+      <h2>3D figure in this shot</h2>
+      <label class="chk"><input type="checkbox" id="pFig3d">Show the posed figure from the Figure 3D tab</label>
+      <div class="row"><button id="pFigPlace" style="flex:1">Place it: click the floor</button></div>
+      <div class="sl"><label>Turn</label><input type="range" id="pFigTurn" min="-180" max="180" step="5" value="0"><output></output></div>
+      <div class="muted" id="pFigInfo">It stands on the pink height marker at that character's height (or 5 ft 4 in, 12 ft away). Pose it in Figure 3D; it updates here. Same lens as the grid, fisheye included.</div>
+    </div>
   </div>
 
   <div class="stage" id="pStage">
@@ -483,6 +500,7 @@
 <script src="app/vendor/pdfjs/pdf.min.js"></script>
 <script src="app/js/panels.js"></script>
 <script src="app/js/perspective.js"></script>
+<script src="app/js/persp3d.js"></script>
 <script src="app/js/gif.js"></script>
 <script src="app/js/timing.js"></script>
 <script src="app/js/camera.js"></script>
