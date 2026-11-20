@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Animation Toolkit</title>
 <link rel="stylesheet" href="app/app.css">
+<script type="importmap">{"imports":{"three":"./app/vendor/three/three.module.js","three/addons/":"./app/vendor/three/addons/"}}</script>
 </head>
 <body>
 <header>
@@ -15,10 +16,76 @@
     <button class="tab" data-mode="timing">Timing</button>
     <button class="tab" data-mode="camera">Camera</button>
     <button class="tab" data-mode="value">Value</button>
-    <button class="tab" data-mode="body">Body</button>
+    <button class="tab" data-mode="body">Body 2D</button>
+    <button class="tab" data-mode="figure">Figure 3D</button>
   </div>
   <span class="muted" style="margin-left:auto">works offline, nothing leaves this computer</span>
 </header>
+
+<!-- ============================== FIGURE 3D ============================== -->
+<section class="mode" id="mode-figure">
+  <div class="side">
+    <div class="card">
+      <h2>Body</h2>
+      <div class="grid2"><button data-fbody="man">Adult man</button><button data-fbody="woman">Adult woman</button></div>
+      <div class="f2" style="margin-top:6px"><label>Build</label><select id="fBuild"><option value="average">Average</option><option value="heavier">Heavier</option><option value="thinner">Thinner</option><option value="teen">Teen</option><option value="kid">Kid (about 8)</option></select></div>
+      <div class="sl"><label>Style</label><input type="range" id="fCartoon" min="0" max="100" step="5" value="0"><output></output></div>
+      <div class="muted" style="display:flex;justify-content:space-between"><span>Realistic</span><span>Cartoony</span><span>Chibi</span></div>
+      <div class="muted" id="fHeads" style="margin-top:6px"></div>
+    </div>
+    <div class="card">
+      <h2>Look</h2>
+      <div class="grid2" id="fStyles"></div>
+      <div class="sl"><label>Light from</label><input type="range" id="fAz" min="-180" max="180" step="5" value="35"><output></output></div>
+      <div class="sl"><label>Light height</label><input type="range" id="fEl" min="5" max="90" step="5" value="50"><output></output></div>
+      <label class="chk"><input type="checkbox" id="fGround" checked>Floor and shadow</label>
+      <label class="chk"><input type="checkbox" id="fBones">Show the skeleton on top</label>
+    </div>
+    <div class="card">
+      <h2>Actions</h2>
+      <div id="fClips"></div>
+      <div class="muted" style="margin-top:6px">Motion library: Mesh2Motion, CC0. Every clip plays on whichever body and build you pick.</div>
+    </div>
+  </div>
+  <div class="stage" id="fStage" style="display:flex;flex-direction:column">
+    <div style="flex:1;position:relative;min-height:0;background:#f4f1ec" id="fHost"><canvas id="fOver" style="position:absolute;inset:0;width:100%;height:100%;z-index:1;touch-action:none"></canvas>
+      <div class="readout" id="fReadout" style="z-index:2;color:var(--text)"></div>
+      <div class="hint" id="fHint" style="z-index:2;color:#3a3542;text-shadow:none">Drag a dot to pose. Green wrists and ankles pull the whole limb, the orange diamond moves the hips (the feet stay put). Drag empty space to turn around the figure, right-drag to slide, scroll to zoom.</div>
+      <div class="soon" id="fOff" style="display:none;position:absolute;inset:0;flex-direction:column;justify-content:center;z-index:3;background:#16151a"></div>
+    </div>
+    <div style="border-top:1px solid var(--line);flex:none;padding:6px 10px;background:var(--bg)">
+      <div class="row" style="margin:0 0 4px"><button class="primary" id="fPlay" style="width:70px">Play</button><b id="fClipLbl" style="flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"></b><span class="muted" id="fFrame"></span>
+        <label class="muted" style="flex:none">Speed</label><input type="range" id="fSpeed" min="25" max="200" step="5" value="100" style="width:100px"><output id="fSpeedO" class="muted" style="width:40px">100%</output>
+        <button id="fFreeze" title="Turn the frame on screen into a still pose you can change">Pose this frame</button></div>
+      <div style="position:relative;height:46px"><canvas id="fTime" style="position:absolute;inset:0;width:100%;height:100%;display:block"></canvas></div>
+    </div>
+  </div>
+  <div class="side">
+    <div class="card">
+      <h2>Selected joint</h2>
+      <b id="fJointName">Click a dot</b>
+      <div id="fJoint" style="margin-top:4px"></div>
+      <div class="row"><button id="fJointReset" style="flex:1">Reset this joint</button></div>
+    </div>
+    <div class="card">
+      <h2>Posing</h2>
+      <label class="chk"><input type="checkbox" id="fLimits" checked>Keep joints inside a real body's range</label>
+      <label class="chk"><input type="checkbox" id="fPlant" checked>Feet stay put when the hips move</label>
+      <div class="f2"><label>Hands</label><select id="fHands"><option value="0.18">relaxed</option><option value="0">open flat</option><option value="0.55">half curled</option><option value="1">fist</option></select></div>
+      <div class="row"><button id="fStand" style="flex:1">Standing pose</button><button id="fUndo" style="flex:1">Undo</button></div>
+      <div class="muted" id="fOverList"></div>
+    </div>
+    <div class="card">
+      <h2>Save</h2>
+      <div class="row"><button class="primary" id="fSavePose" style="flex:1">Save pose</button><button id="fOpenPose" style="flex:1">Open a pose</button></div>
+      <input type="file" id="fPoseFile" accept=".json,application/json" hidden>
+      <div class="f2"><label>Picture</label><select id="fSize"><option value="3840x1920">3840 x 1920</option><option value="1920x1080">1920 x 1080</option><option value="view">this view's size</option></select></div>
+      <label class="chk"><input type="checkbox" id="fTransparent" checked>Transparent (figure only)</label>
+      <button id="fPng" style="width:100%">Save picture (PNG)</button>
+      <div class="muted" id="fSaveInfo"></div>
+    </div>
+  </div>
+</section>
 
 <!-- ============================== START: UPLOAD ============================== -->
 <section class="mode on" id="mode-start">
@@ -422,5 +489,6 @@
 <script src="app/js/value.js"></script>
 <script src="app/js/body.js"></script>
 <script src="app/js/start.js"></script>
+<script src="app/js/figure-tab.js"></script>
 </body>
 </html>
