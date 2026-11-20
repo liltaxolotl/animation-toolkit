@@ -5,6 +5,7 @@
 // Part 2 (headless Chrome, needs `npm i puppeteer-core`): drives both modes with the real mouse,
 //   file inputs and downloads. Uses generated stand-ins, no artwork.
 import fs from 'node:fs';
+import { appSource } from './appsrc.mjs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,7 +13,7 @@ import { createRequire } from 'node:module';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const out = path.join(root, 'tests', 'out'); fs.mkdirSync(out, { recursive: true });
-const html = fs.readFileSync(path.join(root, 'animation_app.html'), 'utf8');
+const html = appSource(root);
 const CamMath = new Function(html.split('/*CAM-START*/')[1].split('/*CAM-END*/')[0] + '; return CamMath;')();
 const ValueMath = new Function(html.split('/*VAL-START*/')[1].split('/*VAL-END*/')[0] + '; return ValueMath;')();
 let fails = 0;

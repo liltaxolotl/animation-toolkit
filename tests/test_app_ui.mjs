@@ -31,8 +31,8 @@ const browser = await puppeteer.launch({ executablePath: chrome, headless: 'new'
 const page = await browser.newPage(); await page.setViewport({ width: 1700, height: 980 });
 const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 const client = await page.createCDPSession(); await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: out });
-await page.goto(pathToFileURL(path.join(root, 'animation_app.html')).href);
-await page.evaluate(() => { localStorage.clear(); }); await page.reload();
+await page.goto(pathToFileURL(path.join(root, 'animation_app.html')).href); await page.click('[data-mode="perspective"]');
+await page.evaluate(() => { localStorage.clear(); }); await page.reload(); await page.click('[data-mode="perspective"]');
 
 // canvas pixel -> screen pixel
 const toScreen = async (p) => page.evaluate(p => { const r = document.querySelector('#pCanvas').getBoundingClientRect(), v = Persp.UI.view; return [r.left + v.x + p[0] * v.s, r.top + v.y + p[1] * v.s]; }, p);

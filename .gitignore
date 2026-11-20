@@ -39,3 +39,12 @@ package.json
 
 # downloaded helper programs (Rhubarb Lip Sync)
 tools/
+
+# the app's private working folder (shot files, copies of originals, versions) and more media types
+work/
+*.pdf
+*.webm
+*.mkv
+*.avi
+*.m4v
+*.part

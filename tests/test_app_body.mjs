@@ -6,13 +6,14 @@
 // Part 2 (headless Chrome, needs `npm i puppeteer-core`): poses it with the real mouse, scrubs, plays,
 //   saves and reopens a motion. Needs no artwork.
 import fs from 'node:fs';
+import { appSource } from './appsrc.mjs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const out = path.join(root, 'tests', 'out'); fs.mkdirSync(out, { recursive: true });
-const html = fs.readFileSync(path.join(root, 'animation_app.html'), 'utf8');
+const html = appSource(root);
 const M = new Function(html.split('/*BODY-START*/')[1].split('/*BODY-END*/')[0] + '; return BodyMath;')();
 let fails = 0;
 const check = (name, ok, detail) => { console.log((ok ? 'PASS  ' : 'FAIL  ') + name + (detail ? '  ' + detail : '')); if (!ok) fails++; };

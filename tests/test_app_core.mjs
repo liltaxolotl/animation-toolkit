@@ -3,12 +3,13 @@
 // It pulls the CORE block out of the HTML, runs it, asks Python for the same projections,
 // and compares the numbers.
 import fs from 'node:fs';
+import { appSource } from './appsrc.mjs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const html = fs.readFileSync(path.join(root, 'animation_app.html'), 'utf8');
+const html = appSource(root);
 const core = html.split('/*CORE-START*/')[1].split('/*CORE-END*/')[0];
 const AT = new Function(core + '; return AT;')();
 

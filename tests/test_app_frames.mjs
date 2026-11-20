@@ -5,6 +5,7 @@
 // Part 1 (no browser): the PSD reader and the line finder inside the HTML, on pictures made here.
 // Part 2 (headless Chrome, needs `npm i puppeteer-core`): the same through the Perspective tab. Needs no artwork.
 import fs from 'node:fs';
+import { appSource } from './appsrc.mjs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -12,7 +13,7 @@ import { createRequire } from 'node:module';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const out = path.join(root, 'tests', 'out'); fs.mkdirSync(out, { recursive: true });
-const html = fs.readFileSync(path.join(root, 'animation_app.html'), 'utf8'), block = n => html.split('/*' + n + '-START*/')[1].split('/*' + n + '-END*/')[0];
+const html = appSource(root), block = n => html.split('/*' + n + '-START*/')[1].split('/*' + n + '-END*/')[0];
 const Psd = new Function(block('PSD') + '; return Psd;')(), LF = new Function(block('LINES') + '; return LineFind;')();
 let fails = 0;
 const check = (name, ok, detail) => { console.log((ok ? 'PASS  ' : 'FAIL  ') + name + (detail ? '  ' + detail : '')); if (!ok) fails++; };
@@ -82,7 +83,7 @@ const psdB = path.join(out, 'frames_room_b.psd'); fs.writeFileSync(psdB, psd(two
 const browser = await puppeteer.launch({ executablePath: chrome, headless: 'new', args: ['--window-size=1700,980'] });
 const page = await browser.newPage(); await page.setViewport({ width: 1700, height: 980 });
 const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
-await page.goto(pathToFileURL(path.join(root, 'animation_app.html')).href); await page.evaluate(() => localStorage.clear()); await page.reload();
+await page.goto(pathToFileURL(path.join(root, 'animation_app.html')).href); await page.evaluate(() => localStorage.clear()); await page.reload(); await page.click('[data-mode="perspective"]');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const toScreen = p => page.evaluate(p => { const r = document.querySelector('#pCanvas').getBoundingClientRect(), v = Persp.UI.view; return [r.left + v.x + p[0] * v.s, r.top + v.y + p[1] * v.s]; }, p);
 const drag = async (a, b) => { const s = await toScreen(a), e = await toScreen(b); await page.mouse.move(s[0], s[1]); await page.mouse.down(); await page.mouse.move((s[0] + e[0]) / 2, (s[1] + e[1]) / 2, { steps: 4 }); await page.mouse.move(e[0], e[1], { steps: 4 }); await page.mouse.up(); };
