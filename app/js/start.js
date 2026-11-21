@@ -102,7 +102,7 @@ const Start = (() => {
   // ---------- what she wants help with
   const ABOUT = {
     perspective: 'Opens Perspective with your drawing. Try "Find the lines for me", then "Check my drawing against the grid".',
-    anatomy: 'For now this opens the silhouette and value check. Pose matching with a 3D figure over your drawing is on its way.',
+    anatomy: 'Opens Pose match: the app guesses the joints on your drawing, you drag any that are off, and the 3D figure is fitted and laid over it as a ghost. The silhouette and value check is in Value.',
     storyboard: 'For now the panels open in Perspective (step through them with &lt; and &gt;) and in Timing as an animatic. Continuity checks are on their way.',
     animation: 'Opens Timing with your frames: onion skin, keys and breakdowns, the timing chart, an x-sheet.',
     all: 'Runs the line finder and the drift check in Perspective, and loads the frames into Timing and Value too.'
@@ -116,7 +116,7 @@ const Start = (() => {
     const toPersp = async () => { showTab('perspective'); await Persp.loadBoardFiles(files); };
     if (kind === 'perspective') await toPersp();
     else if (kind === 'animation') { showTab('timing'); await Timing.loadFiles(files); }
-    else if (kind === 'anatomy') { showTab('value'); await Value.loadFiles(files); }
+    else if (kind === 'anatomy') { showTab('pose'); const P = await ModTabs.get('pose'); if (P) await P.loadFiles(files); else { showTab('value'); await Value.loadFiles(files); } }
     else if (kind === 'storyboard') { await Timing.loadFiles(files); await toPersp(); }
     else if (kind === 'all') { await Value.loadFiles(files); if (files.length > 1) await Timing.loadFiles(files); await toPersp(); Persp.findLines(); Persp.setCheck(true); }
     $('#sHelpInfo').innerHTML = ABOUT[kind];

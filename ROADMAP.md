@@ -22,8 +22,11 @@ pushed without her OK. How to use what is already built: `README.md`.
 - [x] **3. Perspective from the drawing, plus 3D scene renders through a virtual camera.** Detect, adjust and drift
       check were already there (phase 6). Added: 12 shot presets, the posed 3D figure rendered through the Perspective
       camera (fisheye, skew and lens shift included) as its own layer, placed on the floor and sized by the height marker.
-- [ ] **4. Pose from the drawing, with a ghost overlay.** Match the 3D figure to a pose she drew and lay it over the
-      drawing as a faint ghost. (The Start tab's "anatomy" button opens Value until this exists.)
+- [x] **4. Pose from the drawing, with a ghost overlay.** The Pose match tab: a guessed skeleton from the ink, joints
+      she drags, toward or away flips per limb, the 3D figure fitted through a matched camera, a ghost layer, misses in
+      px, honest confidence, transparent exports, numbered copies, the fit saved in the shot file. Start > Anatomy opens
+      it. Also the step 3 review fixes (a playing clip, outline width, light, Turn slider, empty export, kid height,
+      stacking presets).
 - [ ] **5. Redline copies and reference drawings.** Notes and fixes drawn on a new layer (`Vec` items), and reference
       renders to draw from. Her drawing is never touched.
 - [ ] **6. Corrected copies that warp her linework.** Bend her own lines toward a fix (`pin` items mark where a bit of

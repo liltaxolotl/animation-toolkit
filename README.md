@@ -55,6 +55,7 @@ without it nothing saves into `work/` (exports go to Downloads).
 | "Show me how a body bends / let me pose a figure and time it" | Body 2D tab |
 | "How many heads tall is a kid / a chibi?" / "what does a walk, sneak, run, jump look like?" / "show me a hand gripping" | Body 2D tab (Proportions, the motion library, Hands and feet) |
 | "Pose a real figure from any angle" / "a reference render of this pose" / "show me this walk in 3D" | Figure 3D tab |
+| "Match a 3D figure to the pose I drew" / "is this foreshortening right?" / "a ghost over my drawing" | Pose match tab |
 | "Mark shot 12 as cleaned up" | `tracker_update.py` |
 
 Every script prints a short plain summary and the list of files it saved. Run any script with `-h`, or read the
@@ -64,7 +65,7 @@ comment at the top of the file, for every option.
 
 ## The app: `animation_app.html`
 
-Seven tabs: Start, Perspective, Timing, Camera, Value, Body 2D, Figure 3D. Load files with the buttons or by dragging
+Eight tabs: Start, Perspective, Timing, Camera, Value, Body 2D, Figure 3D, Pose match. Load files with the buttons or by dragging
 them onto the picture. Every tab that takes pictures takes PNG, JPG and PSD (the flattened picture inside the PSD;
 layers are not read). No build step: the page is plain HTML, `app/app.css` and the scripts in `app/js/` (see Layout).
 
@@ -270,6 +271,48 @@ Save pose / Open a pose use a pose file:
 `bones` holds every bone's local rotation as a quaternion (three.js order x, y, z, w), so pose with `setAngles` and save
 rather than writing one by hand. `body` is `man` or `woman`, `build` one of `average`, `heavier`, `thinner`, `teen`,
 `kid`, and `cartoon` 0 to 1. Opening a pose switches the body and build to match and rescales the hips' position.
+
+### Pose match tab (`app/js/pose-tab.mjs`, the fit in `app/js/pose-fit.mjs`)
+
+Poses the 3D figure to match a drawing and lays it over the drawing as a ghost. Needs `serve.py` (it loads the 3D
+figure). Start > Anatomy opens it with the chosen pictures.
+
+1. Open a drawing. The app finds the biggest blob of ink (a panel border and small doodles are ignored) and guesses a
+   standing skeleton in it from "Guess as" (7.5, 6, 4.5 or 3 heads). Hollow dots are the app's guesses, filled dots are
+   hers. "Box the character" when it picked the wrong ink. Toes start off; any joint can be marked hidden.
+2. She drags the joints that are off. "Fit again when I let go of a joint" is on by default.
+3. The fit, in plain steps:
+   - Facing: the standing figure's torso joints are turned through every yaw and tilt; for each, the best 2D scale,
+     roll and shift is solved exactly, and the smallest leftover wins. If a facing well away fits nearly as well, a note
+     says the turn is unsure.
+   - Depth: a bone drawn shorter than it is points toward or away from the camera by exactly the missing length. A
+     drawing cannot say which way, so the fit takes the way inside a real body's joint ranges, and on a tie the hand or
+     foot in front of the body. "Flip" on a limb takes the other way. A part drawn at more than about 92% of its length
+     counts as flat to the camera, since perspective and proportions alone shorten that much.
+   - Camera: a plain lens (35 degrees across the long side unless Lens is set) at the distance that makes the figure
+     her size. Height is a soft wish: among facings that fit about as well, the one nearest that height wins.
+4. Shows the ghost (tinted blue, own opacity), her joints, where the figure misses (red, with the distance in px), how
+   sure it is in plain words, and the fit's notes. Her Figure 3D pose is put back after every fit; "Send this pose to
+   Figure 3D" is the only way a fit reaches that tab.
+5. Saves: the ghost, the joints or the misses as transparent PNGs at the drawing's exact size;
+   `<name>_ghost_vN.png` (drawing plus ghost) as a new numbered copy; the joints (who placed each one), flips, camera
+   and fit into `shot.json` under `detections.pose.drawings[<file name>]`, plus two Vec layers ("Pose joints", "Where
+   the figure misses").
+
+From code (the tab, a test, or a Claude driving the page):
+
+    import { fitPose, renderGhost, projectJoints, JOINT_NAMES } from './app/js/pose-fit.mjs'
+    fitPose(Fig3D, {joints: {head: [x, y], neck: [x, y], ...}, W, H, camera: {fov, height} | null, flips: {arm_l: true}})
+      -> {pose (animtk-figure-pose), camera: {pos, right, up, back, theta, center, f, fov}, place, error: {joint: px},
+          joints2d: {joint: [x, y]}, depth: {arm_l: 'toward' | 'away' | 'flat', ...}, confidence: 0 to 1, notes: [text],
+          choices, facing: {yaw, tilt, roll}, scale}
+    renderGhost(Fig3D, fit, W, H)   -> a W x H transparent canvas, already lined up with the drawing
+    projectJoints(Fig3D, fit)       -> where each joint of that pose lands through that camera
+
+Joints (drawing pixels, y down; `l` is the character's own left): head, neck, chest, pelvis, shoulder, elbow, wrist,
+hip, knee, ankle, toe (`_l` / `_r`). Any can be null. It needs two torso joints at least. Measured in
+`tests/test_app_pose.mjs`: the figure posed, photographed through a known camera and fitted back lands its joints within
+1% of the figure's height, with the camera direction within about 6 degrees, front on and from 50 degrees round.
 
 ### Shot files, saving and layers (`app/js/shot.js`, shared by every tab)
 
@@ -496,8 +539,11 @@ Use whichever the artist asked for.
         perspective.js, timing.js, camera.js, value.js, body.js, start.js     one per tab
         persp3d.js           the 3D figure in Perspective: render through the Perspective camera, lens remap
         figure-tab.js        loads Figure 3D the first time its tab opens
+        module-tabs.js       loads the ES module tabs (Pose match) the first time each opens: ModTabs.get(name)
     app/js/figure3d.mjs      the 3D figure (ES module): bodies, builds, looks, joints, IK, clips, snapshot
     app/js/figure-ui.mjs     the Figure 3D tab's controls (ES module)
+    app/js/pose-tab.mjs      the Pose match tab (ES module): drawings, joints, flips, ghost layers, saving
+    app/js/pose-fit.mjs      the pose fit: 2D joints to a 3D pose and camera, the ghost render
     app/vendor/              three.js 0.186.1, pdf.js 3.11.174
     app/assets/figures/      the CC0 bodies and clips (licenses: app/assets/CREDITS.md)
     *.py                     the scripts above
@@ -537,13 +583,19 @@ None of them need artwork: they generate their own stand-ins into `tests/out/`.
     python -P tests/test_serve.py        # serve.py: saves only into work/, never overwrites, refuses every way out, numbered versions
     node tests/test_app_start.mjs        # Start tab (uploads, PDF panels, video frames, routing) and the Perspective layer rows
     node tests/test_app_figure.mjs       # Figure 3D: bodies and builds, joint angle conventions, IK, mouse posing, limits, clips, pose files, pictures
+    node tests/test_app_pose.mjs         # Pose match: the tab with a stand-in fit, then the real fit, then a round trip through a known camera
 
 The browser tests need `npm i puppeteer-core` (in `_scratch/` is fine; it drives the Chrome or Edge already installed).
-`test_serve.py`, `test_app_start.mjs` and `test_app_figure.mjs` start `serve.py` on a free port themselves, and the
-first two remove every `work/_test_*` folder they made.
+`test_serve.py`, `test_app_start.mjs`, `test_app_figure.mjs` and `test_app_pose.mjs` start `serve.py` on a free port
+themselves, and each removes only the `work/_test_*` folders it made, so they can run at the same time.
 
 ## Known limits (say these out loud when they apply)
 
+- Pose match: it fits the big joints only. Hands, fingers, the forearm's twist, the face and which way the head turns
+  are not fitted (the head only tilts). Toward or away is a guess whenever a limb is foreshortened, and the note says
+  so: check the ghost and flip. A stylized character (big head, short legs) is fitted with the adult figure's
+  proportions, so its misses show the style, not a mistake. Tested on generated stick figures and the 3D figure itself,
+  not yet on real drawings.
 - Vanishing points: character linework can look like perspective. Trust the `_check.png`, not just the numbers.
 - Find the lines for me (app): it only sees long, straight, fairly clean strokes (about 7% of the picture's diagonal or
   longer). Sketchy, curved or bowed lines are skipped, so a fisheye room has to be marked by hand. Arms, props and

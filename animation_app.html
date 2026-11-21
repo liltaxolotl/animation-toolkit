@@ -18,9 +18,13 @@
     <button class="tab" data-mode="value">Value</button>
     <button class="tab" data-mode="body">Body 2D</button>
     <button class="tab" data-mode="figure">Figure 3D</button>
+    <button class="tab" data-mode="pose">Pose match</button>
   </div>
   <span class="muted" style="margin-left:auto">works offline, nothing leaves this computer</span>
 </header>
+
+<!-- ============================== POSE MATCH (app/js/pose-tab.mjs builds the inside) ============================== -->
+<section class="mode" id="mode-pose"></section>
 
 <!-- ============================== FIGURE 3D ============================== -->
 <section class="mode" id="mode-figure">
@@ -203,7 +207,7 @@
       <label class="chk"><input type="checkbox" id="pFig3d">Show the posed figure from the Figure 3D tab</label>
       <div class="row"><button id="pFigPlace" style="flex:1">Place it: click the floor</button></div>
       <div class="sl"><label>Turn</label><input type="range" id="pFigTurn" min="-180" max="180" step="5" value="0"><output></output></div>
-      <div class="muted" id="pFigInfo">It stands on the pink height marker at that character's height (or 5 ft 4 in, 12 ft away). Pose it in Figure 3D; it updates here. Same lens as the grid, fisheye included.</div>
+      <div class="muted" id="pFigInfo">It stands on the pink height marker at that character's height, or where you place it. With no marker it keeps its own build's height, 12 ft away. Pose it in Figure 3D; it updates here. Same lens as the grid, fisheye included.</div>
     </div>
   </div>
 
@@ -508,5 +512,6 @@
 <script src="app/js/body.js"></script>
 <script src="app/js/start.js"></script>
 <script src="app/js/figure-tab.js"></script>
+<script src="app/js/module-tabs.js"></script>
 </body>
 </html>
