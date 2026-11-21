@@ -49,7 +49,7 @@ const Persp = (() => {
       for (let z = t; z <= 2*e + 1e-6; z += t) line3(c, cam, [[-e, 0, z], [e, 0, z]], 40);
     }
     if (S.fig3d && S.fig3d.on && G.figure3d !== false) {   // the posed 3D figure, under the guide lines
-      const im = c === ctx ? Persp3D.preview(cam, S) : Persp3D.render(cam, S.figure || { x: 0, z: 12, h: 5.33 }, S.fig3d.turn, S.W, S.H);
+      const im = c === ctx ? Persp3D.preview(cam, S) : Persp3D.render(cam, Persp3D.spot(S), S.fig3d.turn, S.W, S.H);
       if (im) { A('figure3d'); c.drawImage(im, 0, 0, S.W, S.H); }
     }
     if (G.rays) { A('rays');
@@ -202,7 +202,7 @@ const Persp = (() => {
     cv.setPointerCapture(e.pointerId); const p = toCanvas(e);
     if (e.button === 1 || e.button === 2 || UI.space) { UI.drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, x: UI.view.x, y: UI.view.y }; return; }
     if (UI.tool === 'H') { UI.drag = { kind: 'height', p0: p, p1: p }; return; }
-    if (UI.tool === 'F') { const g = AT.planePoint(D.cam, p, 0); if (g) { pushUndo(); S.figure = { x: g[0], z: g[2], h: S.figure ? S.figure.h : 5.33 }; UI.note = ''; } else UI.note = 'That spot is above the horizon, so it is not on the floor.'; setTool('S'); syncAll(); return; }
+    if (UI.tool === 'F') { const g = AT.planePoint(D.cam, p, 0); if (g) { pushUndo(); S.fig3d.at = { x: g[0], z: g[2] }; UI.note = ''; } else UI.note = 'That spot is above the horizon, so it is not on the floor.'; setTool('S'); syncAll(); return; }
     if (UI.tool === 'S') for (const g of ['A', 'B', 'V']) { const vp = D.count[g] > 1 ? D.vp[g] : null; if (vp && Math.abs(vp[0]) < 1e6 && Math.hypot(p[0] - vp[0], p[1] - vp[1]) < 12 / UI.view.s) { pushUndo(); UI.sel = null; UI.drag = { kind: 'vp', g, from: S.lines.filter(l => l.g === g).map(l => ({ l, a: l.a.slice(), b: l.b.slice() })) }; return; } }
     if (UI.tool !== 'S') { pushUndo(); S.lines.push({ g: UI.tool, a: p, b: p.slice() }); UI.sel = { kind: 'line', i: S.lines.length - 1 }; UI.drag = { kind: 'line', i: S.lines.length - 1, part: 'b', fresh: true }; draw(); return; }
     const h = hit(p); UI.sel = h ? { kind: h.kind, i: h.i } : null;
@@ -252,6 +252,7 @@ const Persp = (() => {
   $('#pBA').onchange = e => BA.set(e.target.checked);
   const FMT = { roll: v => v.toFixed(1) + '°', fish: v => Math.round(v) + '%', fov: v => v.toFixed(1) + '°', skew: v => v.toFixed(1) + '°', pitch: v => v.toFixed(1) + '°', yaw: v => v.toFixed(1) + '°', height: v => v.toFixed(1) + ' ft' };
   function syncSliders() {
+    if ($('#pFigTurn')) { $('#pFigTurn').value = S.fig3d.turn || 0; $('#pFigTurn').nextElementSibling.textContent = (S.fig3d.turn || 0) + '°'; $('#pFig3d').checked = !!S.fig3d.on; }
     derive();
     $$('#mode-perspective .sl[data-k]').forEach(el => { const k = el.dataset.k, inp = $('input', el); inp.value = S.cam[k]; $('output', el).textContent = FMT[k](+S.cam[k]); inp.disabled = !!D.locked[k]; el.classList.toggle('locked', !!D.locked[k]); });
     $('#pBoardOp').value = S.boardOp; $('#pBoardOp').nextElementSibling.textContent = S.boardOp + '%';
@@ -301,8 +302,9 @@ const Persp = (() => {
   };
   function applyShot(id) {
     const sh = SHOTS[id]; if (!sh) return; pushUndo();
-    S.useLines = false; Object.assign(S.cam, sh.cam); if (sh.guide) Object.assign(S.guide, sh.guide);
-    if (sh.props) for (const q of sh.props) S.props.push({ id: pid++, rot: 0, ...JSON.parse(JSON.stringify(AT.DEF[q.type])), name: q.name || q.type, ...q, pos: q.pos.slice() });
+    S.useLines = false; Object.assign(S.cam, sh.cam); S.props = S.props.filter(q => !q.preset);
+    Object.assign(S.guide, { walls: false, grid: true, extent: 12 }, sh.guide || {}); S.fig3d.at = null;
+    if (sh.props) for (const q of sh.props) S.props.push({ id: pid++, rot: 0, ...JSON.parse(JSON.stringify(AT.DEF[q.type])), name: q.name || q.type, ...q, pos: q.pos.slice(), preset: true });
     if (sh.figure) { S.figure = { ...sh.figure }; S.poles = (sh.poles || []).map(q => q.slice()); }
     if (sh.turn != null) { S.fig3d.turn = sh.turn; $('#pFigTurn').value = sh.turn; $('#pFigTurn').nextElementSibling.textContent = sh.turn + '°'; }
     if (sh.fig3d) setFig3d(true);
@@ -418,6 +420,7 @@ const Persp = (() => {
     return c;
   }
   function exportLayer(key) {
+    if (key === 'figure3d' && !(S.fig3d.on && window.Fig3D)) { UI.note = 'Tick "Show the posed figure" first: the 3D figure layer is empty until then.'; draw(); return; }
     if (key === 'drift' && !(UI.check && UI.drift)) { UI.note = 'Turn on "Check my drawing against the grid" first: the drift layer is empty until then.'; draw(); return; }
     guideCanvas(key).toBlob(b => Store.exportFile(S.boardName, S.boardName + '_' + key + '.png', b), 'image/png');
   }
@@ -431,7 +434,7 @@ const Persp = (() => {
   }
   function loadScene(o) {
     pushUndo();
-    if (o.app) { S.lines = o.app.lines || []; Object.assign(S.cam, o.app.cam || {}); Object.assign(S.guide, o.app.guide || {}); S.useLines = o.app.useLines !== false; S.solveLens = o.app.solveLens !== false; S.figure = o.app.figure || null; S.poles = o.app.poles || []; if (o.app.fig3d) S.fig3d = { on: false, turn: o.app.fig3d.turn || 0 }; }
+    if (o.app) { S.lines = o.app.lines || []; Object.assign(S.cam, o.app.cam || {}); Object.assign(S.guide, o.app.guide || {}); S.useLines = o.app.useLines !== false; S.solveLens = o.app.solveLens !== false; S.figure = o.app.figure || null; S.poles = o.app.poles || []; if (o.app.fig3d) S.fig3d = { on: false, turn: o.app.fig3d.turn || 0, at: o.app.fig3d.at || null }; }
     else {
       S.lines = [];
       if (o.lines && o.vanishing_points) {        // a perspective_check JSON: bring its grouped lines in

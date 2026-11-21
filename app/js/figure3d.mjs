@@ -453,7 +453,7 @@ uniform float uPx; uniform vec2 uRes;`)
     THREE, S, scene, camera, controls, renderer, get F() { return F; }, JOINTS, POSABLE, BODIES, BUILDS, STYLES, CLIPS,
     setBody, render, jointName, angles, setAngles: (n, v, c) => { setAngles(n, v, c ?? S.limits); F.root.updateMatrixWorld(true); render(); changed(); },
     setBuild: (b, cartoon) => { const p = getPose(); if (b != null) S.build = b; if (cartoon != null) S.cartoon = cartoon; const c = S.clip && S.clip.id, t = S.t; stopClip(); reshape(); setPose(p); if (c) playClip(c).then(() => seek(t)); render(); changed(); },
-    setStyle: s => { S.style = s; applyStyle(); changed(); }, setLight: (az, el) => { S.light = { az, el }; render(); }, curlFingers: (s, a) => { if (S.clip) freeze(); curlFingers(s, a); F.root.updateMatrixWorld(true); render(); changed(); },
+    setStyle: s => { S.style = s; applyStyle(); changed(); }, setLight: (az, el) => { S.light = { az, el }; render(); changed(); }, curlFingers: (s, a) => { if (S.clip) freeze(); curlFingers(s, a); F.root.updateMatrixWorld(true); render(); changed(); },
     standing, getPose, setPose, renderThrough, moveHips: (t, plant) => { moveHips(t, plant); render(); }, overLimits, playClip, seek, play, pause, freeze, stopClip, frameOf, FPS, snapshot, pickJoint, reach: (n, t) => { reach(n, t); render(); }, wpos, proj: v => proj(v, ...size()),
     on: f => listeners.add(f), heads: () => F.heads
   };

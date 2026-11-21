@@ -2,7 +2,7 @@
 // layers (opacity, one-layer export, before/after). Needs no artwork: every input is generated here.
 //   node tests/test_app_start.mjs
 // Needs puppeteer-core (npm i puppeteer-core, in _scratch/ is fine) and Chrome or Edge. It starts serve.py on a free
-// port (the PDF reader needs http), and removes every work/_test_* folder it caused when it is done.
+// port (the PDF reader needs http), and removes the work/_test_* folders it caused (only its own) when it is done.
 import fs from 'node:fs';
 import path from 'node:path';
 import net from 'node:net';
@@ -17,7 +17,9 @@ const work = path.join(root, 'work');
 let fails = 0;
 const check = (name, ok, detail) => { console.log((ok ? 'PASS  ' : 'FAIL  ') + name + (detail ? '  ' + detail : '')); if (!ok) fails++; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const cleanWork = () => { try { for (const n of fs.readdirSync(work)) if (n.startsWith('_test_')) fs.rmSync(path.join(work, n), { recursive: true, force: true }); } catch (e) {} };
+// only this test's own folders, so a pose or serve test running at the same time keeps its own
+const MINE = /^_test_(story|board3840|seq|ver|dot)/;
+const cleanWork = () => { try { for (const n of fs.readdirSync(work)) if (MINE.test(n)) fs.rmSync(path.join(work, n), { recursive: true, force: true }); } catch (e) {} };
 
 let puppeteer;
 for (const base of [root, path.join(root, '_scratch'), process.cwd()]) { try { puppeteer = createRequire(path.join(base, 'x.js'))('puppeteer-core'); break; } catch (e) {} }

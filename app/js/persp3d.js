@@ -8,18 +8,25 @@
 const Persp3D = (() => {
   const FT = 0.3048, DEG = Math.PI / 180;
   const flip = a => [a[0], a[1], -a[2]];
-  let cache = null, ver = 0, timer = 0, hooked = false;
+  let cache = null, ver = 0, timer = 0, hooked = false, want = null;
 
+  // where the figure stands and how tall it is (feet): its own spot if placed, else on the height marker; the height
+  // of the marker's character if measured, else the body's own height (so a kid build stays kid sized)
+  function spot(S) {
+    const own = window.Fig3D && Fig3D.F ? Fig3D.F.height / FT : 5.33, at = S.fig3d && S.fig3d.at;
+    return { x: at ? at.x : S.figure ? S.figure.x : 0, z: at ? at.z : S.figure ? S.figure.z : 12, h: S.figure ? S.figure.h : own };
+  }
   function view(cam, fig, turn, outW) {
-    // how wide the square picture must be to cover every pixel of the drawing (fisheye corners can go past 90: capped)
+    // how wide the square picture must be to cover every pixel of the drawing (fisheye corners past 76 degrees are cut)
     let mx = 0; const W = cam.W, H = cam.H;
     for (let i = 0; i <= 8; i++) for (const uv of [[W * i / 8, 0], [W * i / 8, H], [0, H * i / 8], [W, H * i / 8]]) mx = Math.max(mx, Math.acos(Math.max(-1, Math.min(1, AT.rayCam(cam, uv)[2]))));
     const theta = Math.min(mx + 2 * DEG, 76 * DEG), fOut = cam.f * outW / W;
     const N = Math.max(256, Math.min(4096, Math.ceil(2 * Math.tan(theta) * fOut * 1.05)));
     const C3 = flip(cam.C).map(v => v * FT), place = { x: fig.x * FT, z: -fig.z * FT, height: fig.h * FT };
-    const toCam = Math.atan2(C3[0] - place.x, C3[2] - place.z);        // 0 turn = facing the camera
-    place.yaw = toCam + (turn || 0) * DEG;
-    return { pos: C3, right: flip(cam.R[0]), up: flip(cam.R[1]), back: flip(cam.R[2]).map(v => -v), theta, N, place, outlinePx: 1.6 * N / Math.max(400, outW * 0.8) };
+    place.yaw = Math.atan2(C3[0] - place.x, C3[2] - place.z) + (turn || 0) * DEG;     // 0 turn = facing the camera
+    // the outline is a fixed width on the DRAWING (W / 600 px, about 6 px at 3840), whatever size this render is
+    const outOut = (W / 600) * outW / W, outlinePx = Math.max(0.8, outOut * N / (2 * Math.tan(theta) * fOut));
+    return { pos: C3, right: flip(cam.R[0]), up: flip(cam.R[1]), back: flip(cam.R[2]).map(v => -v), theta, N, place, outlinePx };
   }
   // the figure at outW x outH covering the whole drawing (transparent canvas), or null when the figure is not loaded
   function render(cam, fig, turn, outW, outH) {
@@ -39,19 +46,20 @@ const Persp3D = (() => {
     }
     g.putImageData(img, 0, 0); return out;
   }
-  // screen copy, redrawn a moment after anything changes (camera, figure spot, pose)
+  // screen copy. Throttled, not debounced: while a clip plays in Figure 3D it still updates (every ~150 ms)
   function preview(cam, S) {
     const f = S.fig3d; if (!f || !f.on || !window.Fig3D) return null;
-    const fig = S.figure || { x: 0, z: 12, h: 5.33 }, outW = Math.min(S.W, 1400), outH = Math.round(outW * S.H / S.W);
+    const fig = spot(S), outW = Math.min(S.W, 1400), outH = Math.round(outW * S.H / S.W);
     const key = JSON.stringify([cam.C, cam.R, cam.f, cam.k, cam.ox, cam.oy, cam.shear, cam.W, cam.H, fig, f.turn, ver, outW]);
     if (cache && cache.key === key) return cache.canvas;
-    clearTimeout(timer); timer = setTimeout(() => { const c = render(cam, fig, f.turn, outW, outH); if (c) { cache = { key, canvas: c }; Persp.draw(); } }, 60);
-    return cache ? cache.canvas : null;           // the old picture until the new one is ready
+    want = { cam, fig, turn: f.turn, outW, outH, key };
+    if (!timer) timer = setTimeout(() => { timer = 0; const w = want; const c = render(w.cam, w.fig, w.turn, w.outW, w.outH); if (c) { cache = { key: w.key, canvas: c }; Persp.draw(); } }, cache ? 150 : 30);
+    return cache ? cache.canvas : null;            // the last picture until the new one is ready
   }
   async function load() {
     const F = await FigureTab.load(); if (!F) return null;
     if (!hooked) { hooked = true; F.on(() => { ver++; if (Persp.S.fig3d && Persp.S.fig3d.on && $('#mode-perspective').classList.contains('on')) Persp.draw(); }); }
     return F;
   }
-  return { render, preview, load, view };
+  return { render, preview, load, view, spot };
 })();

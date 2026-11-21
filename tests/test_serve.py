@@ -77,7 +77,7 @@ def read(rel):
 def clean():
     if os.path.isdir(WORK):
         for n in os.listdir(WORK):
-            if n.startswith('_test_'):
+            if n.startswith(RUN):            # only this run's folders: other tests may be running too
                 shutil.rmtree(os.path.join(WORK, n), ignore_errors=True)
 
 
