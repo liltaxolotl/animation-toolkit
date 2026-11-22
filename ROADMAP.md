@@ -27,8 +27,12 @@ pushed without her OK. How to use what is already built: `README.md`.
       px, honest confidence, transparent exports, numbered copies, the fit saved in the shot file. Start > Anatomy opens
       it. Also the step 3 review fixes (a playing clip, outline width, light, Turn slider, empty export, kid height,
       stacking presets).
-- [ ] **5. Redline copies and reference drawings.** Notes and fixes drawn on a new layer (`Vec` items), and reference
-      renders to draw from. Her drawing is never touched.
+- [x] **5. Redline copies and reference drawings.** The Redline tab: marks pasted from a Claude chat (it copies the
+      request for you), opened from a file, or drawn by hand, all draggable, with notes, layers and a paintover fade.
+      Saves a numbered copy, a transparent layer and the marks JSON. `redline.py` does the same from Python, and
+      `--from-perspective` marks every line the perspective check flags with where it should aim. Python and the app
+      draw the same pixels (tested). Reference drawings were already covered by `scene_render.py --camera` and the
+      3D figure's "Save picture".
 - [ ] **6. Corrected copies that warp her linework.** Bend her own lines toward a fix (`pin` items mark where a bit of
       line should move to). Always a new numbered version, never a redraw.
 - [ ] **7. Critique, with no API.** The app builds a packet (pictures, measurements, the shot file) to copy into a

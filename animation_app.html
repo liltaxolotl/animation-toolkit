@@ -19,12 +19,14 @@
     <button class="tab" data-mode="body">Body 2D</button>
     <button class="tab" data-mode="figure">Figure 3D</button>
     <button class="tab" data-mode="pose">Pose match</button>
+    <button class="tab" data-mode="redline">Redline</button>
   </div>
   <span class="muted" style="margin-left:auto">works offline, nothing leaves this computer</span>
 </header>
 
 <!-- ============================== POSE MATCH (app/js/pose-tab.mjs builds the inside) ============================== -->
 <section class="mode" id="mode-pose"></section>
+<section class="mode" id="mode-redline"></section>
 
 <!-- ============================== FIGURE 3D ============================== -->
 <section class="mode" id="mode-figure">
@@ -118,6 +120,7 @@
         <button class="tile" data-help="perspective"><svg viewBox="0 0 32 32"><path d="M3 26L16 12l13 14M16 12v16M3 26h26"/></svg>Perspective</button>
         <button class="tile" data-help="anatomy"><svg viewBox="0 0 32 32"><circle cx="16" cy="6" r="3"/><path d="M16 9v10M9 13l7 2 7-2M16 19l-5 9M16 19l5 9"/></svg>Anatomy</button>
         <button class="tile" data-help="storyboard"><svg viewBox="0 0 32 32"><path d="M3 6h11v8H3zM18 6h11v8H18zM3 18h11v8H3zM18 18h11v8H18z"/></svg>Storyboard</button>
+        <button class="tile" data-help="redline"><svg viewBox="0 0 32 32"><path d="M5 27l4-1 15-15-3-3L6 23zM19 10l3 3"/><path d="M18 26h9"/></svg>Redline</button>
         <button class="tile" data-help="animation"><svg viewBox="0 0 32 32"><path d="M4 22c4-12 8-12 12 0s8 12 12 0"/><circle cx="4" cy="22" r="1.6"/><circle cx="16" cy="22" r="1.6"/><circle cx="28" cy="22" r="1.6"/></svg>Animation</button>
       </div>
       <button class="primary" data-help="all" style="width:100%;margin-top:6px">Check everything</button>

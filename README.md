@@ -56,6 +56,8 @@ without it nothing saves into `work/` (exports go to Downloads).
 | "How many heads tall is a kid / a chibi?" / "what does a walk, sneak, run, jump look like?" / "show me a hand gripping" | Body 2D tab (Proportions, the motion library, Hands and feet) |
 | "Pose a real figure from any angle" / "a reference render of this pose" / "show me this walk in 3D" | Figure 3D tab |
 | "Match a 3D figure to the pose I drew" / "is this foreshortening right?" / "a ghost over my drawing" | Pose match tab |
+| "Redline this" / "draw your notes on my drawing" / "mark the lines that miss the vanishing point" | Redline tab, or `redline.py` (`--from-perspective`) |
+| "A clean reference drawing of this room or pose from my camera" | `scene_render.py --camera`, or Figure 3D / Perspective "Save picture" |
 | "Mark shot 12 as cleaned up" | `tracker_update.py` |
 
 Every script prints a short plain summary and the list of files it saved. Run any script with `-h`, or read the
@@ -65,7 +67,7 @@ comment at the top of the file, for every option.
 
 ## The app: `animation_app.html`
 
-Eight tabs: Start, Perspective, Timing, Camera, Value, Body 2D, Figure 3D, Pose match. Load files with the buttons or by dragging
+Nine tabs: Start, Perspective, Timing, Camera, Value, Body 2D, Figure 3D, Pose match, Redline. Load files with the buttons or by dragging
 them onto the picture. Every tab that takes pictures takes PNG, JPG and PSD (the flattened picture inside the PSD;
 layers are not read). No build step: the page is plain HTML, `app/app.css` and the scripts in `app/js/` (see Layout).
 
@@ -314,6 +316,26 @@ hip, knee, ankle, toe (`_l` / `_r`). Any can be null. It needs two torso joints 
 `tests/test_app_pose.mjs`: the figure posed, photographed through a known camera and fitted back lands its joints within
 1% of the figure's height, with the camera direction within about 6 degrees, front on and from 50 degrees round.
 
+### Redline tab (`app/js/redline-tab.mjs`)
+
+Notes and fixes drawn over a copy of a drawing, never on the drawing itself. Three ways to get marks:
+- **From Claude, with no API.** "Copy a request for Claude" puts a short note on the clipboard that explains the marks
+  format and gives the drawing's size. She pastes it into a Claude chat with her drawing, then pastes the answer into the
+  box and clicks "Draw these marks". Words or a ```json fence around the JSON are fine, and marks written on a smaller
+  copy are scaled up from the W and H Claude gives. Anything it cannot read is skipped with a plain "heads up".
+- **From a file:** a marks JSON from `redline.py` or an earlier save ("Open a marks file", "Open my last saved", or
+  drop the JSON on the picture).
+- **By hand:** Arrow, Line, Circle, Box, Text and Warp pin (a pin says where a bit of line should move to, for the
+  corrected copies of step 6), on any layer. Fixes is red, Construction is blue (its lines come out dashed), "New layer"
+  adds more.
+
+Move picks a mark: drag it, drag its dots, give it a "why" note, Delete removes it, Ctrl+Z undoes. Notes show in a list,
+and clicking one picks its mark. Layers have their own tick box, opacity and export. "Fade drawing" lightens the drawing
+under the marks the way a paintover reads (the same sum as `animtk/imgio.dim`). "Save a redline copy" writes a new
+numbered trio into `work/<shot>/`: `<name>_redline_vN.png` (the copy), `_layer.png` (marks alone, transparent, the
+drawing's exact size) and `.json` (the marks, to open again here or in `redline.py`), and lists it in the shot file's
+`edits`. `redline.py` and the tab share the numbering, so either can carry on from the other.
+
 ### Shot files, saving and layers (`app/js/shot.js`, shared by every tab)
 
 - **Store** saves into `work/<shot>/` through `serve.py`, or downloads when the page was opened as a plain file. Names
@@ -375,6 +397,22 @@ Out: `BOARD_check.png` (look at this first), `BOARD_guide.png` (transparent guid
 It reads every long straight stroke, so arms and props can pull it off. Groups with little ink behind them are drawn
 thin and named "maybe 1", "maybe 2": if the picture shows one is real, rerun with `--pick` and its number. Mask
 characters with `--ignore`. On a board that is mostly characters, mark the perspective by hand in the app instead.
+
+### redline.py: marks drawn over a drawing as a new numbered copy
+
+    python redline.py DRAWING MARKS.json [--shot NAME | --out DIR] [--fade 35] [--tag WORD] [--check]
+    python redline.py DRAWING --from-perspective [CHECK.json] [--shot NAME | --out DIR] [--fade 35]
+
+Out (new files, numbered, the drawing is only read): `<name>_redline_vN.png`, `<name>_redline_vN_layer.png`
+(transparent, the drawing's size) and `<name>_redline_vN.json`, into `--out`, else `work/<shot>/`, else the drawing's
+own `work/` folder, else `out/redline/`. MARKS.json is the format at the top of the script (the same one the Redline tab
+reads and writes, drawn by `animtk/layers.py`). `--from-perspective` works out the marks itself: every line the
+perspective check flags gets a red line where it would sit if it aimed at its vanishing point (turned about its own
+middle), arrows at ends that move far enough to see, and a number; the blue Construction layer has the horizon, the
+trusted vanishing points and a dashed ray from each fixed line to its point. It runs the check itself, or reads a
+`_check.json` from `perspective_check.py` (use that when `--region` / `--ignore` are needed). Its files are tagged
+`perspective`. From Python: `redline.perspective_marks(check)`, `redline.doc_from_items(items, W, H)` and
+`redline.save_redline(drawing, doc, shot=...)`.
 
 ### scene_render.py: 3D blockout through a virtual camera
 
@@ -516,7 +554,9 @@ Use whichever the artist asked for.
 - App Timing x-sheet CSV and `lip_sync.py` CSV both count frames from 1 at the same fps, so the mouth column lines up
   with the x-sheet rows (`--start` shifts it when the line starts later in the shot).
 - `motion_check.py` says where a breakdown is missing -> `inbetween.py` on those two frames.
-- App Start -> Perspective, Timing, Value: plain picture files (PDF panels, video frames), never the originals.
+- App Start -> Perspective, Timing, Value, Pose match, Redline: plain picture files (PDF panels, video frames), never the originals.
+- `perspective_check.py` `_check.json` -> `redline.py --from-perspective` -> the marks JSON opens in the Redline tab,
+  and the tab's saved marks open in `redline.py`. A Claude chat's marks go in through the tab's paste box.
 - Everything the app saves through `serve.py` sits in `work/<shot>/` (shot file, copies of originals, numbered
   versions, exports), where the scripts can read it.
 
@@ -539,11 +579,12 @@ Use whichever the artist asked for.
         perspective.js, timing.js, camera.js, value.js, body.js, start.js     one per tab
         persp3d.js           the 3D figure in Perspective: render through the Perspective camera, lens remap
         figure-tab.js        loads Figure 3D the first time its tab opens
-        module-tabs.js       loads the ES module tabs (Pose match) the first time each opens: ModTabs.get(name)
+        module-tabs.js       loads the ES module tabs (Pose match, Redline) the first time each opens: ModTabs.get(name)
     app/js/figure3d.mjs      the 3D figure (ES module): bodies, builds, looks, joints, IK, clips, snapshot
     app/js/figure-ui.mjs     the Figure 3D tab's controls (ES module)
     app/js/pose-tab.mjs      the Pose match tab (ES module): drawings, joints, flips, ghost layers, saving
     app/js/pose-fit.mjs      the pose fit: 2D joints to a 3D pose and camera, the ghost render
+    app/js/redline-tab.mjs   the Redline tab (ES module), and parseDoc(), the twin of animtk/layers.normalize
     app/vendor/              three.js 0.186.1, pdf.js 3.11.174
     app/assets/figures/      the CC0 bodies and clips (licenses: app/assets/CREDITS.md)
     *.py                     the scripts above
@@ -557,6 +598,7 @@ Use whichever the artist asked for.
         cammove.py           camera move math                (mirrored in the app: CAM block)
         value.py             silhouette and grayscale        (mirrored in the app: VAL block)
         anatomy.py           rigs and checks
+        layers.py            the Vec overlay format drawn in Python (twin of Vec in app/js/shot.js)
     examples/                a sample scene, blank landmark files
     tests/                   see below
     samples/ out/ tools/ work/    git-ignored: artwork, results, Rhubarb, the app's working folder
@@ -584,9 +626,11 @@ None of them need artwork: they generate their own stand-ins into `tests/out/`.
     node tests/test_app_start.mjs        # Start tab (uploads, PDF panels, video frames, routing) and the Perspective layer rows
     node tests/test_app_figure.mjs       # Figure 3D: bodies and builds, joint angle conventions, IK, mouse posing, limits, clips, pose files, pictures
     node tests/test_app_pose.mjs         # Pose match: the tab with a stand-in fit, then the real fit, then a round trip through a known camera
+    python tests/test_redline.py         # redline.py: reading marks, numbered copies, --check, --from-perspective on a generated room
+    node tests/test_app_redline.mjs      # Redline tab: paste, draw, drag, save; parseDoc vs normalize; Chrome vs Python pixels
 
 The browser tests need `npm i puppeteer-core` (in `_scratch/` is fine; it drives the Chrome or Edge already installed).
-`test_serve.py`, `test_app_start.mjs`, `test_app_figure.mjs` and `test_app_pose.mjs` start `serve.py` on a free port
+`test_serve.py`, `test_app_start.mjs`, `test_app_figure.mjs`, `test_app_pose.mjs` and `test_app_redline.mjs` start `serve.py` on a free port
 themselves, and each removes only the `work/_test_*` folders it made, so they can run at the same time.
 
 ## Known limits (say these out loud when they apply)
@@ -596,6 +640,9 @@ themselves, and each removes only the `work/_test_*` folders it made, so they ca
   so: check the ghost and flip. A stylized character (big head, short legs) is fitted with the adult figure's
   proportions, so its misses show the style, not a mistake. Tested on generated stick figures and the 3D figure itself,
   not yet on real drawings.
+- Redline: Python and the app draw lines, arrows, shapes and fills to within 1% of the same pixels, but text uses
+  whatever font each side has (Segoe UI Semibold here), so words can sit a pixel or two apart. `--from-perspective`
+  only marks what the perspective check flags, so it inherits that check's limits (below).
 - Vanishing points: character linework can look like perspective. Trust the `_check.png`, not just the numbers.
 - Find the lines for me (app): it only sees long, straight, fairly clean strokes (about 7% of the picture's diagonal or
   longer). Sketchy, curved or bowed lines are skipped, so a fisheye room has to be marked by hand. Arms, props and
