@@ -1,11 +1,11 @@
 // ============================== MODULE TABS: loader ==============================
-// Tabs written as ES modules (Pose match first; the board, redline and fix-it tabs use the same door) load the first
+// Tabs written as ES modules (Pose match, Redline, Storyboard; later tabs use the same door) load the first
 // time they open, or when another tab asks for one. Like the 3D figure they need the toolkit server, because browsers
 // do not load modules from a double-clicked file.
 //   ModTabs.get('pose') -> Promise of that tab's API (what its start(section) returns), or null with a note on the tab.
 // Each module exports start(sectionEl), builds its own markup inside #mode-<name>, and is started only once.
 const ModTabs = (() => {
-  const FILES = { pose: 'app/js/pose-tab.mjs', redline: 'app/js/redline-tab.mjs' };
+  const FILES = { pose: 'app/js/pose-tab.mjs', redline: 'app/js/redline-tab.mjs', board: 'app/js/board-tab.mjs' };
   const loading = {};
   const note = (sec, title, body) => { sec.innerHTML = '<div class="soon" style="display:flex;flex-direction:column;justify-content:center"><b>' + title + '</b>' + body + '</div>'; };
   function get(mode) {

@@ -103,7 +103,7 @@ const Start = (() => {
   const ABOUT = {
     perspective: 'Opens Perspective with your drawing. Try "Find the lines for me", then "Check my drawing against the grid".',
     anatomy: 'Opens Pose match: the app guesses the joints on your drawing, you drag any that are off, and the 3D figure is fitted and laid over it as a ghost. The silhouette and value check is in Value.',
-    storyboard: 'For now the panels open in Perspective (step through them with &lt; and &gt;) and in Timing as an animatic. Continuity checks are on their way.',
+    storyboard: 'Opens Storyboard: the panels in order with a shot size guess, holds, camera moves, an overhead map that points out 180 line crossings and screen direction flips, animatic playback and a shot list. A video is split at its cuts.',
     redline: 'Opens Redline: paste notes and fixes a Claude wrote (the tab copies the request for you), or draw your own, then save a numbered copy plus a transparent layer.',
     animation: 'Opens Timing with your frames: onion skin, keys and breakdowns, the timing chart, an x-sheet.',
     all: 'Runs the line finder and the drift check in Perspective, and loads the frames into Timing and Value too.'
@@ -119,7 +119,7 @@ const Start = (() => {
     else if (kind === 'animation') { showTab('timing'); await Timing.loadFiles(files); }
     else if (kind === 'anatomy') { showTab('pose'); const P = await ModTabs.get('pose'); if (P) await P.loadFiles(files); else { showTab('value'); await Value.loadFiles(files); } }
     else if (kind === 'redline') { showTab('redline'); const R = await ModTabs.get('redline'); if (R) await R.loadFiles(files); }
-    else if (kind === 'storyboard') { await Timing.loadFiles(files); await toPersp(); }
+    else if (kind === 'storyboard') { showTab('board'); const B = await ModTabs.get('board'); if (B) await B.loadFiles(files, { name: it.name, animatic: it.kind === 'video', pullFps: it.fps }); else { await Timing.loadFiles(files); await toPersp(); } }
     else if (kind === 'all') { await Value.loadFiles(files); if (files.length > 1) await Timing.loadFiles(files); await toPersp(); Persp.findLines(); Persp.setCheck(true); }
     $('#sHelpInfo').innerHTML = ABOUT[kind];
   }

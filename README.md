@@ -57,6 +57,7 @@ without it nothing saves into `work/` (exports go to Downloads).
 | "Pose a real figure from any angle" / "a reference render of this pose" / "show me this walk in 3D" | Figure 3D tab |
 | "Match a 3D figure to the pose I drew" / "is this foreshortening right?" / "a ghost over my drawing" | Pose match tab |
 | "Redline this" / "draw your notes on my drawing" / "mark the lines that miss the vanishing point" | Redline tab, or `redline.py` (`--from-perspective`) |
+| "Does my board keep screen direction?" / "time this board as an animatic" / "a shot list" | Storyboard tab |
 | "A clean reference drawing of this room or pose from my camera" | `scene_render.py --camera`, or Figure 3D / Perspective "Save picture" |
 | "Mark shot 12 as cleaned up" | `tracker_update.py` |
 
@@ -67,7 +68,7 @@ comment at the top of the file, for every option.
 
 ## The app: `animation_app.html`
 
-Nine tabs: Start, Perspective, Timing, Camera, Value, Body 2D, Figure 3D, Pose match, Redline. Load files with the buttons or by dragging
+Ten tabs: Start, Perspective, Timing, Camera, Value, Body 2D, Figure 3D, Pose match, Redline, Storyboard. Load files with the buttons or by dragging
 them onto the picture. Every tab that takes pictures takes PNG, JPG and PSD (the flattened picture inside the PSD;
 layers are not read). No build step: the page is plain HTML, `app/app.css` and the scripts in `app/js/` (see Layout).
 
@@ -336,6 +337,26 @@ numbered trio into `work/<shot>/`: `<name>_redline_vN.png` (the copy), `_layer.p
 drawing's exact size) and `.json` (the marks, to open again here or in `redline.py`), and lists it in the shot file's
 `edits`. `redline.py` and the tab share the numbering, so either can carry on from the other.
 
+### Storyboard tab (`app/js/board-tab.mjs`)
+
+A board in panel order: pictures (sorted by the numbers in their names, so p2 comes before p10), the Start tab's PDF
+panels, or a video split at its cuts ("From Start", or Start > Storyboard). "Find the cuts" does the same for a folder of
+animatic frames: frames that barely change are one held drawing.
+- **Each panel:** a shot size (it starts as a guess from where the biggest ink shape sits in the frame, and says it is a
+  guess), an angle, a hold in frames, a note, and "New setup here" for a jump on purpose.
+- **Camera move:** pan or tilt, truck, or zoom, drawn as a solid start frame and a dashed end frame on the panel. Drag
+  a frame or its corners (it keeps the panel's shape). It is described in words (TRUCK IN + PAN RIGHT) and exports as a
+  transparent PNG at the panel's exact size.
+- **Overhead map:** she places the camera (and where it aims) and up to four characters (and where they face). A and B
+  make the 180 line. Nothing is read from the drawing. A panel follows the map before it until she changes something.
+- **Continuity:** "look here" notes when the camera crosses the 180 line between cuts, and when someone walking flips
+  screen direction. A shot right on the line, a walk head on, or "New setup here" bridges it, the way it does on screen.
+- **Animatic:** plays the board at 24, 25, 30 or 12 fps, easing through each camera move. Drag a panel's right edge in
+  the strip to change its hold.
+- **Export:** a shot list CSV (size, angle, move, frames, seconds, in and out timecode, look-here notes, notes) and a
+  shot list sheet PNG. "Save the board" keeps it all in `work/<board>/shot.json` under `detections.board`, and opening
+  the same panels again picks it back up.
+
 ### Shot files, saving and layers (`app/js/shot.js`, shared by every tab)
 
 - **Store** saves into `work/<shot>/` through `serve.py`, or downloads when the page was opened as a plain file. Names
@@ -554,7 +575,7 @@ Use whichever the artist asked for.
 - App Timing x-sheet CSV and `lip_sync.py` CSV both count frames from 1 at the same fps, so the mouth column lines up
   with the x-sheet rows (`--start` shifts it when the line starts later in the shot).
 - `motion_check.py` says where a breakdown is missing -> `inbetween.py` on those two frames.
-- App Start -> Perspective, Timing, Value, Pose match, Redline: plain picture files (PDF panels, video frames), never the originals.
+- App Start -> Perspective, Timing, Value, Pose match, Redline, Storyboard: plain picture files (PDF panels, video frames), never the originals.
 - `perspective_check.py` `_check.json` -> `redline.py --from-perspective` -> the marks JSON opens in the Redline tab,
   and the tab's saved marks open in `redline.py`. A Claude chat's marks go in through the tab's paste box.
 - Everything the app saves through `serve.py` sits in `work/<shot>/` (shot file, copies of originals, numbered
@@ -579,12 +600,13 @@ Use whichever the artist asked for.
         perspective.js, timing.js, camera.js, value.js, body.js, start.js     one per tab
         persp3d.js           the 3D figure in Perspective: render through the Perspective camera, lens remap
         figure-tab.js        loads Figure 3D the first time its tab opens
-        module-tabs.js       loads the ES module tabs (Pose match, Redline) the first time each opens: ModTabs.get(name)
+        module-tabs.js       loads the ES module tabs (Pose match, Redline, Storyboard) the first time each opens: ModTabs.get(name)
     app/js/figure3d.mjs      the 3D figure (ES module): bodies, builds, looks, joints, IK, clips, snapshot
     app/js/figure-ui.mjs     the Figure 3D tab's controls (ES module)
     app/js/pose-tab.mjs      the Pose match tab (ES module): drawings, joints, flips, ghost layers, saving
     app/js/pose-fit.mjs      the pose fit: 2D joints to a 3D pose and camera, the ghost render
     app/js/redline-tab.mjs   the Redline tab (ES module), and parseDoc(), the twin of animtk/layers.normalize
+    app/js/board-tab.mjs     the Storyboard tab (ES module): panels, holds, moves, the overhead map and its 180 line checks
     app/vendor/              three.js 0.186.1, pdf.js 3.11.174
     app/assets/figures/      the CC0 bodies and clips (licenses: app/assets/CREDITS.md)
     *.py                     the scripts above
@@ -628,9 +650,10 @@ None of them need artwork: they generate their own stand-ins into `tests/out/`.
     node tests/test_app_pose.mjs         # Pose match: the tab with a stand-in fit, then the real fit, then a round trip through a known camera
     python tests/test_redline.py         # redline.py: reading marks, numbered copies, --check, --from-perspective on a generated room
     node tests/test_app_redline.mjs      # Redline tab: paste, draw, drag, save; parseDoc vs normalize; Chrome vs Python pixels
+    node tests/test_app_board.mjs        # Storyboard: the 180 line and screen direction math, size guess, cuts, moves, map, shot list, save and reload
 
 The browser tests need `npm i puppeteer-core` (in `_scratch/` is fine; it drives the Chrome or Edge already installed).
-`test_serve.py`, `test_app_start.mjs`, `test_app_figure.mjs`, `test_app_pose.mjs` and `test_app_redline.mjs` start `serve.py` on a free port
+`test_serve.py`, `test_app_start.mjs`, `test_app_figure.mjs`, `test_app_pose.mjs`, `test_app_redline.mjs` and `test_app_board.mjs` start `serve.py` on a free port
 themselves, and each removes only the `work/_test_*` folders it made, so they can run at the same time.
 
 ## Known limits (say these out loud when they apply)
@@ -643,6 +666,9 @@ themselves, and each removes only the `work/_test_*` folders it made, so they ca
 - Redline: Python and the app draw lines, arrows, shapes and fills to within 1% of the same pixels, but text uses
   whatever font each side has (Segoe UI Semibold here), so words can sit a pixel or two apart. `--from-perspective`
   only marks what the perspective check flags, so it inherits that check's limits (below).
+- Storyboard: the shot size guess only sees where the biggest ink shape sits in the frame, not faces or bodies, so it
+  is a starting point and says so. The 180 line and screen direction come from the overhead map she sets up, not from
+  the drawings. Finding cuts in an animatic can split a shot at a fast move or a fade, and merge two very similar shots.
 - Vanishing points: character linework can look like perspective. Trust the `_check.png`, not just the numbers.
 - Find the lines for me (app): it only sees long, straight, fairly clean strokes (about 7% of the picture's diagonal or
   longer). Sketchy, curved or bowed lines are skipped, so a fisheye room has to be marked by hand. Arms, props and

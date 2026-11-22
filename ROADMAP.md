@@ -38,8 +38,11 @@ pushed without her OK. How to use what is already built: `README.md`.
 - [ ] **7. Critique, with no API.** The app builds a packet (pictures, measurements, the shot file) to copy into a
       Claude chat or Claude Code; the answer comes back as JSON pasted into the app and drawn as a layer.
 - [ ] **8. Frame sequence tools.** Tools that work across a whole shot's frames.
-- [ ] **9. Storyboard continuity and animatic timing.** Checks across panels (screen direction, props, sizes) and
-      timing a board as an animatic. (The Start tab's "storyboard" button opens Timing and Perspective until this exists.)
+- [x] **9. Storyboard continuity and animatic timing.** The Storyboard tab: panels in order (pictures, PDF panels, a
+      video split at its cuts), a shot size guess, angle, hold and note per panel, camera moves as start and end frames,
+      an overhead map whose 180 line and walking directions drive "look here" notes between cuts, animatic playback
+      and a shot list (CSV and sheet), saved in the shot file. Start > Storyboard opens it. Prop continuity across
+      panels is not covered yet.
 - [ ] **10. Hands and feet.**
 - [ ] **11. Everything else.** Including the two older phase lists, built only where nothing covers them yet:
   - Old phase 7, Frame Lab: camera move with rotation, lens variant comparison sheets with blending, clip check, puppet
